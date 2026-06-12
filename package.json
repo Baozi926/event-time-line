@@ -1,0 +1,20 @@
+{
+  "name": "event-time-line",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "db:migrate": "pnpm --filter @event-time-line/database migrate",
+    "db:seed": "pnpm --filter @event-time-line/database seed",
+    "worker:run": "pnpm --filter @event-time-line/worker run:once",
+    "lint": "turbo lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

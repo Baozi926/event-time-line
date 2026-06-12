@@ -1,0 +1,44 @@
+import dotenv from 'dotenv';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { closePool } from '@event-time-line/database';
+import {
+  runFetchPipeline,
+  runSnapshotPipeline,
+  runTrackedPipeline,
+} from './pipeline.js';
+
+dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
+
+async function main() {
+  const cmd = process.argv[2] ?? 'fetch';
+
+  try {
+    switch (cmd) {
+      case 'fetch':
+        await runFetchPipeline();
+        break;
+      case 'tracked':
+        await runTrackedPipeline();
+        break;
+      case 'snapshot':
+        await runSnapshotPipeline();
+        break;
+      case 'all':
+        await runFetchPipeline();
+        await runTrackedPipeline();
+        await runSnapshotPipeline();
+        break;
+      default:
+        console.error(`Unknown command: ${cmd}. Use fetch|tracked|snapshot|all`);
+        process.exit(1);
+    }
+  } finally {
+    await closePool();
+  }
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
