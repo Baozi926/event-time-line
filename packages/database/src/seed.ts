@@ -1,6 +1,12 @@
 import dotenv from 'dotenv';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_RSS_FEEDS,
+  DEFAULT_COLLECTION_SCHEDULE,
+  DEFAULT_DATA_SOURCES_SETTINGS,
+  DATA_SOURCES_SETTINGS_KEY,
+} from '@event-time-line/shared';
 import { query, closePool } from './client.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
@@ -15,7 +21,9 @@ const TIER1_DOMAINS = [
   { domain: 'nytimes.com', name: 'New York Times', tier: 'tier1' },
   { domain: 'washingtonpost.com', name: 'Washington Post', tier: 'tier1' },
   { domain: 'cnn.com', name: 'CNN', tier: 'tier2' },
-  { domain: 'xinhuanet.com', name: '新华网', tier: 'tier2' },
+  { domain: 'dw.com', name: 'DW', tier: 'tier1' },
+  { domain: 'france24.com', name: 'France 24', tier: 'tier1' },
+  { domain: 'npr.org', name: 'NPR', tier: 'tier1' },
 ];
 
 async function seed() {
@@ -26,6 +34,36 @@ async function seed() {
        VALUES ($1, $2, $3::credibility_tier)
        ON CONFLICT (domain) DO UPDATE SET credibility_tier = EXCLUDED.credibility_tier`,
       [s.name, s.domain, s.tier],
+    );
+  }
+  console.log('Seeding collection schedule defaults...');
+  await query(
+    `INSERT INTO app_settings (key, value)
+     VALUES ($1, $2::jsonb)
+     ON CONFLICT (key) DO NOTHING`,
+    [
+      'collection_schedule',
+      JSON.stringify(DEFAULT_COLLECTION_SCHEDULE),
+    ],
+  );
+  console.log('Seeding data source defaults...');
+  await query(
+    `INSERT INTO app_settings (key, value)
+     VALUES ($1, $2::jsonb)
+     ON CONFLICT (key) DO NOTHING`,
+    [
+      DATA_SOURCES_SETTINGS_KEY,
+      JSON.stringify(DEFAULT_DATA_SOURCES_SETTINGS),
+    ],
+  );
+  console.log('Seeding default RSS feeds...');
+  for (let i = 0; i < DEFAULT_RSS_FEEDS.length; i++) {
+    const feed = DEFAULT_RSS_FEEDS[i];
+    await query(
+      `INSERT INTO rss_feeds (name, url, domain, language, enabled, is_builtin, sort_order)
+       VALUES ($1, $2, $3, $4, TRUE, TRUE, $5)
+       ON CONFLICT (url) DO UPDATE SET is_builtin = TRUE`,
+      [feed.name, feed.url, feed.domain, feed.language, i],
     );
   }
   console.log('Seed completed.');

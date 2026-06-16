@@ -7,6 +7,12 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { eventRoutes } from './routes/events.js';
 import { candidateRoutes } from './routes/candidates.js';
+import { collectionRoutes } from './routes/collection.js';
+import { rssFeedRoutes } from './routes/rss-feeds.js';
+import { statsRoutes } from './routes/stats.js';
+import { trackingHistoryRoutes } from './routes/tracking-history.js';
+import { hotTrendRoutes } from './routes/hot-trends.js';
+import { dataSourcesSettingsRoutes } from './routes/data-sources-settings.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
 
@@ -34,6 +40,12 @@ app.get('/health', async () => ({ status: 'ok' }));
 
 await app.register(eventRoutes);
 await app.register(candidateRoutes);
+await app.register(collectionRoutes);
+await app.register(rssFeedRoutes);
+await app.register(statsRoutes);
+await app.register(trackingHistoryRoutes);
+await app.register(hotTrendRoutes);
+await app.register(dataSourcesSettingsRoutes);
 
 try {
   await app.listen({ port, host: '0.0.0.0' });

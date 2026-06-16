@@ -3,26 +3,33 @@ import type { RawArticle } from '@event-time-line/shared';
 import { clusterKeyFromTitle, slugify } from '../utils.js';
 import { calculateHeatScore, updateEventStats } from './scoring.js';
 
+/** USGS-style titles are location-specific; title similarity would merge distinct quakes. */
+function isDistinctEarthquakeTitle(title: string): boolean {
+  return /^M\d+(?:\.\d+)?\s+earthquake\s+[—-]/i.test(title.trim());
+}
+
 export async function clusterArticle(
   articleId: string,
   title: string,
   categoryHint?: string,
 ): Promise<string | null> {
-  const similar = await query<{ id: string; similarity: number }>(
-    `SELECT e.id, similarity(e.title, $1) AS similarity
-     FROM events e
-     WHERE e.tracking_status IN ('candidate', 'tracking')
-       AND similarity(e.title, $1) > 0.25
-     ORDER BY similarity DESC
-     LIMIT 1`,
-    [title],
-  );
+  if (!isDistinctEarthquakeTitle(title)) {
+    const similar = await query<{ id: string; similarity: number }>(
+      `SELECT e.id, similarity(e.title, $1) AS similarity
+       FROM events e
+       WHERE e.tracking_status IN ('candidate', 'tracking')
+         AND similarity(e.title, $1) > 0.25
+       ORDER BY similarity DESC
+       LIMIT 1`,
+      [title],
+    );
 
-  if (similar.rows[0] && similar.rows[0].similarity > 0.35) {
-    const eventId = similar.rows[0].id;
-    await linkArticleToEvent(eventId, articleId);
-    await updateEventStats(eventId);
-    return eventId;
+    if (similar.rows[0] && similar.rows[0].similarity > 0.35) {
+      const eventId = similar.rows[0].id;
+      await linkArticleToEvent(eventId, articleId);
+      await updateEventStats(eventId);
+      return eventId;
+    }
   }
 
   const clusterKey = clusterKeyFromTitle(title);

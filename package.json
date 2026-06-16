@@ -5,6 +5,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "db:migrate": "pnpm --filter @event-time-line/database migrate",
+    "db:patch": "pnpm --filter @event-time-line/database db-patch",
     "db:seed": "pnpm --filter @event-time-line/database seed",
     "worker:run": "pnpm --filter @event-time-line/worker run:once",
     "lint": "turbo lint"

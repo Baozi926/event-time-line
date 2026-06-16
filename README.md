@@ -1,97 +1,129 @@
-# Event Timeline — 热点事件历史
+# Event Timeline
 
-自动聚合全球热点事件，生成结构化发展时间线，帮用户快速理解事件来龙去脉。
+Event Timeline 是一个热点事件聚合与时间线项目。它通过 GDELT、RSS、USGS 等数据源采集新闻和事件数据，经过后台 Worker 处理后，在 Web 端展示事件、候选文章、采集记录和数据源配置。
 
-## 产品定位
+## 功能概览
 
-- **目标用户**：普通大众读者
-- **核心价值**：用 1–3 分钟看懂一个全球热点事件的完整脉络
-- **平台**：Web + App
-- **数据策略**：GDELT + RSS 自动聚合，AI 生成摘要与时间线
+- 热点事件列表与事件详情
+- 候选文章管理与事件关联
+- GDELT、RSS、USGS 等数据采集
+- 采集任务记录与文章明细查看
+- RSS 源和采集计划配置
+- 后台 Worker 定时或手动执行数据管道
 
-## 文档目录
+## 技术栈
 
-| 文档 | 说明 |
-|------|------|
-| [PRD](docs/PRD.md) | 产品需求文档：用户故事、功能范围、验收标准 |
-| [数据模型](docs/data-model.md) | 核心实体设计、关系、热度算法、聚类策略 |
-| [数据源评估](docs/data-sources-evaluation.md) | GDELT、RSS、Wikidata 等数据源能力与版权分析 |
-| [MVP 数据流](docs/mvp-flow.md) | 采集→聚类→摘要→时间线→排序完整管道设计 |
-| [技术选型](docs/tech-stack.md) | 前后端、数据库、部署方案 |
+- Monorepo：pnpm workspace + Turborepo
+- Web：Next.js 15、React 19、Tailwind CSS
+- API：Fastify、TypeScript
+- Worker：BullMQ、ioredis、tsx
+- 数据库：PostgreSQL 16 + pgvector
+- 缓存 / 队列：Redis 7
 
-## 技术栈（规划）
+## 项目结构
 
-| 层 | 技术 |
-|----|------|
-| Web | Next.js 15 + Tailwind + shadcn/ui |
-| App | Expo (React Native) |
-| API | NestJS + Prisma |
-| Worker | BullMQ 数据管道 |
-| 数据库 | PostgreSQL 16 + pgvector |
-| 缓存 | Redis 7 |
-| LLM | OpenAI gpt-4o-mini |
-| 部署 | Vercel + Railway + Neon |
-
-## 项目结构（规划）
-
-```
+```text
 event-time-line/
 ├── apps/
-│   ├── web/                 # Next.js 前端
-│   ├── mobile/              # Expo App
-│   ├── api/                 # NestJS API
-│   └── worker/              # 数据管道
+│   ├── web/        # Next.js 前端
+│   ├── api/        # Fastify API 服务
+│   └── worker/     # 数据采集与处理任务
 ├── packages/
-│   ├── shared/              # 共享类型与工具
-│   └── database/            # SQL Schema
-├── docs/                    # 需求与设计文档
+│   ├── database/   # 数据库连接、迁移和种子数据
+│   └── shared/     # 共享类型与工具
+├── docs/           # 产品、数据模型和技术文档
+├── docker-compose.yml
 └── README.md
 ```
 
-## MVP 里程碑
+## 本地运行
 
-| 阶段 | 周期 | 交付 |
-|------|------|------|
-| M0 需求与设计 | 1 周 | PRD、数据模型、技术选型 ✅ |
-| M1 数据管道 | 2 周 | GDELT 采集、聚类、摘要 |
-| M2 Web MVP | 2 周 | 首页、详情、搜索 |
-| M3 App + 订阅 | 2 周 | 移动端、通知 |
-| M4 优化上线 | 1 周 | 性能、合规、灰度 |
+### 环境要求
 
-## 快速开始
+- Node.js >= 20
+- pnpm 9.x
+- Docker / Docker Compose
 
-```bash
-# 1. 启动 PostgreSQL + Redis
+### 启动步骤
+
+```powershell
+# 1. 启动 PostgreSQL 和 Redis
 docker compose up -d
 
 # 2. 安装依赖
 pnpm install
 
-# 3. 配置环境变量
-cp .env.example .env
+# 3. 创建本地环境变量
+Copy-Item .env.example .env
 
-# 4. 数据库迁移与种子数据
+# 4. 初始化数据库
 pnpm db:migrate
 pnpm db:seed
 
-# 5. 运行一次数据采集（GDELT + RSS）
-pnpm worker:run
-
-# 6. 启动 API 与 Web（分别开终端）
-pnpm --filter @event-time-line/api dev
-pnpm --filter @event-time-line/web dev
+# 5. 启动 Web、API、Worker 开发服务
+pnpm dev
 ```
 
-- Web: http://localhost:3000
-- API: http://localhost:3001
-- Swagger: http://localhost:3001/docs
+启动后默认访问：
 
-### 后台 Worker（定时任务）
+- Web：http://localhost:3000
+- API：http://localhost:3001
+- API 文档：http://localhost:3001/docs
 
-```bash
+## 数据采集
+
+可以手动运行一轮采集任务：
+
+```powershell
+# GDELT / USGS / 热榜
+pnpm worker:run fetch
+
+# RSS
+pnpm worker:run fetch-rss
+
+# 全部任务
+pnpm worker:run all
+```
+
+如果只想启动后台 Worker：
+
+```powershell
 pnpm --filter @event-time-line/worker dev
 ```
 
+## 常用命令
+
+```powershell
+pnpm dev         # 启动所有开发服务
+pnpm build       # 构建所有包和应用
+pnpm lint        # 运行 lint
+pnpm db:migrate  # 执行数据库迁移
+pnpm db:seed     # 写入种子数据
+pnpm worker:run  # 手动运行 Worker 任务
+```
+
+## 环境变量
+
+复制 `.env.example` 为 `.env` 后按需修改。常用变量包括：
+
+- `DATABASE_URL`：PostgreSQL 连接地址
+- `REDIS_URL`：Redis 连接地址
+- `API_PORT`：API 服务端口
+- `NEXT_PUBLIC_API_URL`：前端访问 API 的地址
+- `GDELT_DOC_URL`：GDELT 文档接口地址
+- `VALYU_API_KEY`：可选，Valyu 新闻搜索 API Key
+- `USGS_EARTHQUAKE_URL`：USGS 地震数据源地址
+
+## 相关文档
+
+- [PRD](docs/PRD.md)
+- [数据模型](docs/data-model.md)
+- [筛选维度](docs/filter-dimensions.md)
+- [数据采集](docs/data-collection.md)
+- [数据源评估](docs/data-sources-evaluation.md)
+- [MVP 数据流](docs/mvp-flow.md)
+- [技术选型](docs/tech-stack.md)
+
 ## License
 
-Private — All rights reserved.
+Private - All rights reserved.

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { closePool } from '@event-time-line/database';
 import {
   runFetchPipeline,
+  runHotTrendFetchPipeline,
+  runRssFetchPipeline,
   runSnapshotPipeline,
   runTrackedPipeline,
 } from './pipeline.js';
@@ -18,6 +20,12 @@ async function main() {
       case 'fetch':
         await runFetchPipeline();
         break;
+      case 'fetch-hot-trend':
+        await runHotTrendFetchPipeline();
+        break;
+      case 'fetch-rss':
+        await runRssFetchPipeline({ force: true });
+        break;
       case 'tracked':
         await runTrackedPipeline();
         break;
@@ -26,11 +34,13 @@ async function main() {
         break;
       case 'all':
         await runFetchPipeline();
+        await runHotTrendFetchPipeline();
+        await runRssFetchPipeline({ force: true });
         await runTrackedPipeline();
         await runSnapshotPipeline();
         break;
       default:
-        console.error(`Unknown command: ${cmd}. Use fetch|tracked|snapshot|all`);
+        console.error(`Unknown command: ${cmd}. Use fetch|fetch-hot-trend|fetch-rss|tracked|snapshot|all`);
         process.exit(1);
     }
   } finally {

@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@layer base {
+  body {
+    @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgb(219 234 254 / 0.5), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(241 245 249 / 0.8), transparent);
+  }
+}
+
+@layer components {
+  body:has(.dashboard-screen) {
+    overflow: hidden;
+  }
+
+  .card {
+    @apply rounded-xl border border-slate-200/80 bg-white shadow-sm;
+  }
+
+  .card-hover {
+    @apply rounded-xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:border-blue-200 hover:shadow-md;
+  }
+
+  .btn-primary {
+    @apply rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
 }

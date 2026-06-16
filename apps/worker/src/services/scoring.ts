@@ -1,5 +1,5 @@
-import { query } from '@event-time-line/database';
-import { HEAT_WEIGHTS, PROMOTE_THRESHOLDS } from '@event-time-line/shared';
+import { query, recordTrackingHistory } from '@event-time-line/database';
+import { HEAT_WEIGHTS } from '@event-time-line/shared';
 
 const TIER_SCORES: Record<string, number> = {
   tier1: 1.0,
@@ -49,10 +49,10 @@ export async function calculateHeatScore(eventId: string): Promise<number> {
       (SELECT COUNT(*)::text FROM event_articles ea
        JOIN articles a ON a.id = ea.article_id
        WHERE ea.event_id = e.id AND a.published_at > NOW() - INTERVAL '6 hours') AS articles_6h,
-      (SELECT COUNT(DISTINCT s.country_code)::text FROM event_articles ea
+      (SELECT COUNT(DISTINCT COALESCE(a.country_code, s.country_code))::text FROM event_articles ea
        JOIN articles a ON a.id = ea.article_id
        JOIN sources s ON s.id = a.source_id
-       WHERE ea.event_id = e.id AND s.country_code IS NOT NULL) AS countries,
+       WHERE ea.event_id = e.id AND COALESCE(a.country_code, s.country_code) IS NOT NULL) AS countries,
       (SELECT COALESCE(AVG(
          CASE s.credibility_tier
            WHEN 'tier1' THEN 1.0 WHEN 'tier2' THEN 0.7
@@ -110,76 +110,17 @@ export async function scoreAllCandidates(): Promise<number> {
   return candidates.rows.length;
 }
 
-export async function promoteEligibleEvents(): Promise<number> {
-  const eligible = await query<{ id: string; title: string }>(
-    `SELECT e.id, e.title FROM events e
-     WHERE e.tracking_status = 'candidate'
-       AND e.source_count >= $1
-       AND e.heat_score >= $2
-       AND (
-         SELECT COUNT(*) FROM event_articles ea
-         JOIN articles a ON a.id = ea.article_id
-         WHERE ea.event_id = e.id AND a.published_at > NOW() - INTERVAL '24 hours'
-       ) >= $3`,
-    [
-      PROMOTE_THRESHOLDS.minSourceCount,
-      PROMOTE_THRESHOLDS.minHeatScore,
-      PROMOTE_THRESHOLDS.minArticleCount24h,
-    ],
-  );
-
-  let promoted = 0;
-  for (const row of eligible.rows) {
-    await query(
-      `UPDATE events SET tracking_status = 'tracking', updated_at = NOW() WHERE id = $1`,
-      [row.id],
-    );
-
-    const keywords = extractKeywords(row.title);
-    const existing = await query(
-      'SELECT 1 FROM event_queries WHERE event_id = $1',
-      [row.id],
-    );
-    if (existing.rows.length === 0) {
-      await query(
-        `INSERT INTO event_queries (event_id, keywords, gdelt_query)
-         VALUES ($1, $2, $3)`,
-        [row.id, keywords, buildQuery(keywords)],
-      );
-    }
-
-    await query(
-      `UPDATE hotspot_candidates SET status = 'promoted', updated_at = NOW()
-       WHERE event_id = $1`,
-      [row.id],
-    );
-
-    promoted++;
-  }
-
-  return promoted;
-}
-
 export async function archiveStaleEvents(): Promise<number> {
-  const res = await query(
+  const res = await query<{ id: string }>(
     `UPDATE events SET tracking_status = 'archived', updated_at = NOW()
      WHERE tracking_status = 'tracking'
        AND last_updated_at < NOW() - INTERVAL '7 days'
      RETURNING id`,
   );
+
+  for (const row of res.rows) {
+    await recordTrackingHistory(row.id, 'untracked', 'auto_archive');
+  }
+
   return res.rowCount ?? 0;
-}
-
-function extractKeywords(title: string): string[] {
-  return title
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 4)
-    .slice(0, 5);
-}
-
-function buildQuery(keywords: string[]): string {
-  if (keywords.length === 0) return '';
-  if (keywords.length === 1) return `"${keywords[0]}"`;
-  return `(${keywords.map((k) => `"${k}"`).join(' OR ')})`;
 }

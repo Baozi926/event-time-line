@@ -19,6 +19,7 @@ CREATE TYPE timeline_node_type AS ENUM (
 );
 CREATE TYPE event_relation_type AS ENUM ('background', 'consequence', 'parallel', 'sub_event');
 CREATE TYPE tracking_status AS ENUM ('candidate', 'tracking', 'archived');
+CREATE TYPE tracking_action AS ENUM ('tracked', 'untracked');
 
 -- ============================================================
 -- Sources
@@ -99,6 +100,7 @@ CREATE TABLE articles (
   tone          DOUBLE PRECISION,
   image_url     TEXT,
   location_id   UUID REFERENCES locations(id),
+  category_hint VARCHAR(50),
   is_duplicate  BOOLEAN NOT NULL DEFAULT FALSE,
   embedding     vector(1536),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -355,3 +357,55 @@ CREATE TABLE hotspot_candidates (
 
 CREATE UNIQUE INDEX idx_hotspot_candidates_cluster ON hotspot_candidates (cluster_key);
 CREATE INDEX idx_hotspot_candidates_status ON hotspot_candidates (status, heat_score DESC);
+
+-- Incremental patches for existing databases
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS category_hint VARCHAR(50);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS country_code CHAR(2);
+CREATE INDEX IF NOT EXISTS idx_articles_country ON articles (country_code) WHERE country_code IS NOT NULL;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS feed_url VARCHAR(2048);
+CREATE INDEX IF NOT EXISTS idx_articles_feed_url ON articles (feed_url, fetched_at DESC) WHERE feed_url IS NOT NULL;
+
+-- Global feeds (e.g. USGS) must not pin one country on the shared source row
+UPDATE sources SET country_code = NULL WHERE domain = 'earthquake.usgs.gov';
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key         VARCHAR(100) PRIMARY KEY,
+  value       JSONB NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- RSS Feeds (admin-configurable collection sources)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS rss_feeds (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name        VARCHAR(200) NOT NULL,
+  url         VARCHAR(2048) NOT NULL UNIQUE,
+  domain      VARCHAR(255) NOT NULL,
+  language    VARCHAR(10) NOT NULL DEFAULT 'en',
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  is_builtin  BOOLEAN NOT NULL DEFAULT FALSE,
+  sort_order  INT NOT NULL DEFAULT 0,
+  fetch_interval_minutes INT,
+  last_fetched_at TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rss_feeds_enabled ON rss_feeds (enabled, sort_order);
+
+-- ============================================================
+-- Tracking history (follow / unfollow audit log)
+-- ============================================================
+
+CREATE TABLE tracking_history (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id    UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  action      tracking_action NOT NULL,
+  source      VARCHAR(20) NOT NULL DEFAULT 'manual',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_tracking_history_created ON tracking_history (created_at DESC);
+CREATE INDEX idx_tracking_history_event ON tracking_history (event_id, created_at DESC);

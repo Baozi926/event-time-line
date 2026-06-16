@@ -1,0 +1,1 @@
+export const COLLECTION_RUNS_PAGE_SIZE = 30;

@@ -23,21 +23,49 @@ export function normalizeUrl(url: string): string {
       }
     }
     u.hash = '';
-    return u.toString();
+    let result = u.toString();
+    if (result.endsWith('/')) {
+      result = result.slice(0, -1);
+    }
+    return result;
   } catch {
     return url;
   }
 }
 
-export function parseGdeltDate(seendate: string): Date {
-  // GDELT format: YYYYMMDDHHMMSS
-  const y = seendate.slice(0, 4);
-  const m = seendate.slice(4, 6);
-  const d = seendate.slice(6, 8);
-  const h = seendate.slice(8, 10);
-  const min = seendate.slice(10, 12);
-  const s = seendate.slice(12, 14);
-  return new Date(`${y}-${m}-${d}T${h}:${min}:${s}Z`);
+export function parseGdeltDate(seendate: string | undefined | null): Date {
+  if (!seendate?.trim()) return new Date();
+
+  const trimmed = seendate.trim();
+
+  if (trimmed.includes('-') || trimmed.includes('T')) {
+    const iso = new Date(trimmed);
+    if (!Number.isNaN(iso.getTime())) return iso;
+  }
+
+  // GDELT format: YYYYMMDDHHMMSS (may be truncated)
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length >= 8) {
+    const y = digits.slice(0, 4);
+    const m = digits.slice(4, 6);
+    const d = digits.slice(6, 8);
+    const h = digits.slice(8, 10) || '00';
+    const min = digits.slice(10, 12) || '00';
+    const s = digits.slice(12, 14) || '00';
+    const parsed = new Date(`${y}-${m}-${d}T${h}:${min}:${s}Z`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  return new Date();
+}
+
+export function toIsoStringSafe(date: Date, fallback = new Date()): string {
+  const target = Number.isNaN(date.getTime()) ? fallback : date;
+  return target.toISOString();
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export function extractDomain(url: string): string {

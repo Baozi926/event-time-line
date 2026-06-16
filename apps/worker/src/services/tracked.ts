@@ -1,6 +1,7 @@
 import { query } from '@event-time-line/database';
+import { prepareArticlesForIngest } from '@event-time-line/shared';
 import { fetchGdeltForQuery } from '../fetchers/gdelt.js';
-import { ingestArticles } from './articles.js';
+import { buildRunArticlesMetadata, ingestArticles } from './articles.js';
 import { updateEventStats, calculateHeatScore } from './scoring.js';
 
 export async function collectTrackedEvents(): Promise<{
@@ -21,8 +22,8 @@ export async function collectTrackedEvents(): Promise<{
     if (!q) continue;
 
     try {
-      const articles = await fetchGdeltForQuery(q, '7d');
-      const { newCount, articleIds } = await ingestArticles(articles);
+      const articles = prepareArticlesForIngest(await fetchGdeltForQuery(q, '7d'));
+      const { newCount, articleIds, items } = await ingestArticles(articles);
 
       for (let i = 0; i < articles.length; i++) {
         const articleId = articleIds[i];
@@ -43,10 +44,11 @@ export async function collectTrackedEvents(): Promise<{
 
       totalNew += newCount;
 
+      const metadata = buildRunArticlesMetadata(articles, items);
       await query(
-        `INSERT INTO collection_runs (run_type, source_type, event_id, status, articles_found, articles_new, finished_at)
-         VALUES ('fetch_tracked', 'gdelt_doc', $1, 'completed', $2, $3, NOW())`,
-        [event.id, articles.length, newCount],
+        `INSERT INTO collection_runs (run_type, source_type, event_id, status, articles_found, articles_new, metadata, finished_at)
+         VALUES ('fetch_tracked', 'gdelt_doc', $1, 'completed', $2, $3, $4, NOW())`,
+        [event.id, articles.length, newCount, JSON.stringify(metadata)],
       );
 
       await sleep(2000);

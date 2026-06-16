@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./pipeline": "./src/pipeline.ts",
+    "./hot-trend": "./src/fetchers/hot-trend.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -15,7 +19,8 @@
     "bullmq": "^5.34.5",
     "dotenv": "^16.4.7",
     "ioredis": "^5.4.2",
-    "rss-parser": "^3.13.0"
+    "rss-parser": "^3.13.0",
+    "valyu-js": "^2.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
