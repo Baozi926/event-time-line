@@ -18,6 +18,12 @@ import { Alert } from '@/components/ui/Alert';
 
 export const dynamic = 'force-dynamic';
 
+const SORT_OPTIONS = [
+  { value: 'heat', label: '按热度' },
+  { value: 'recent', label: '最新发现' },
+  { value: 'updated', label: '最近更新' },
+] as const;
+
 
 
 export default async function CandidatesPage({
@@ -26,13 +32,14 @@ export default async function CandidatesPage({
 
 }: {
 
-  searchParams: Promise<{ category?: string; country?: string; language?: string }>;
+  searchParams: Promise<{ category?: string; country?: string; language?: string; sort?: string }>;
 
 }) {
 
-  const { category, country, language } = await searchParams;
+  const { category, country, language, sort: sortParam } = await searchParams;
+  const sort = sortParam ?? 'heat';
 
-  const listPath = buildCandidatesListPath({ category, country, language });
+  const listPath = buildCandidatesListPath({ category, country, language, sort });
 
 
 
@@ -45,6 +52,8 @@ export default async function CandidatesPage({
   try {
 
     data = await getCandidates({
+
+      sort,
 
       category,
 
@@ -75,15 +84,14 @@ export default async function CandidatesPage({
     <div className="min-w-0 space-y-4">
 
       <PageHeader
-
+        variant="playful"
+        eyebrow="好苗子都在这里"
         title="候选热点池"
-
-        description="系统自动发现的候选事件，可手动加入关注或归档"
-
-        bordered={false}
-
-        className="mb-0"
-
+        description="系统自动发现的候选事件，挑几个加入关注，或者先放着观察也行。"
+        stats={[
+          { label: '候选总数', value: data?.total ?? '-', accent: 'brand' },
+          { label: '当前筛选', value: hasFilters ? '已开启' : '全部', accent: 'orange' },
+        ]}
       />
 
 
@@ -114,6 +122,10 @@ export default async function CandidatesPage({
 
               activeLanguage={language}
 
+              activeSort={sort}
+
+              sortOptions={[...SORT_OPTIONS]}
+
               total={data.total}
 
             />
@@ -132,9 +144,9 @@ export default async function CandidatesPage({
 
                 hasFilters
 
-                  ? '尝试调整筛选条件，或清除筛选查看全部候选'
+                  ? '筛选条件可能太严了，放宽一点说不定有惊喜'
 
-                  : '请先运行数据采集任务，系统将自动发现候选事件'
+                  : '跑一轮采集后，系统会自动把新发现的事件丢进这里'
 
               }
 
@@ -153,6 +165,8 @@ export default async function CandidatesPage({
               total={data.total}
 
               listPath={listPath}
+
+              sort={sort}
 
               filters={{ category, country, language }}
 

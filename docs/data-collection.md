@@ -1,6 +1,6 @@
 # 数据采集手段
 
-本文档描述 **Event Timeline 当前已实现** 的数据采集方式、触发渠道与后续处理流程。内容以代码实现为准（截至 M1 数据管道阶段）。
+本文档描述 **拾光纪当前已实现** 的数据采集方式、触发渠道与后续处理流程。内容以代码实现为准（截至 M1 数据管道阶段）。
 
 ---
 
@@ -15,6 +15,7 @@ flowchart LR
         RSS[RSS Feeds]
         Valyu[Valyu Search API]
         USGS[USGS 地震 Feed]
+        NewsNow[NewsNow 热榜 API]
     end
 
     subgraph fetchers [采集器 apps/worker/src/fetchers]
@@ -22,6 +23,7 @@ flowchart LR
         RssFetcher[rss.ts]
         ValyuFetcher[valyu.ts]
         UsgsFetcher[usgs.ts]
+        HotTrendFetcher[hot-trend.ts]
     end
 
     subgraph filter [入库前处理 packages/shared]
@@ -31,7 +33,7 @@ flowchart LR
     subgraph pipeline [管道 apps/worker/src/pipeline.ts]
         Ingest[入库 ingestArticles]
         Cluster[聚类 clusterRawArticles]
-        Score[评分 / 自动晋升 / 归档]
+        Score[候选评分 / 过期归档]
     end
 
     subgraph triggers [触发方式]
@@ -45,10 +47,12 @@ flowchart LR
     RSS --> RssFetcher
     Valyu --> ValyuFetcher
     USGS --> UsgsFetcher
+    NewsNow --> HotTrendFetcher
     GdeltFetcher --> Prepare
     RssFetcher --> Prepare
     ValyuFetcher --> Prepare
     UsgsFetcher --> Prepare
+    HotTrendFetcher --> Prepare
     Prepare --> Ingest
     Ingest --> Cluster --> Score
 
@@ -190,15 +194,17 @@ flowchart LR
 
 ## 3. 采集任务类型
 
-Worker 通过 BullMQ 队列 `event-pipeline` 执行三类任务（`apps/worker/src/index.ts`）：
+Worker 通过 BullMQ 队列 `event-pipeline` 执行多类任务（`apps/worker/src/index.ts`）：
 
 | 任务名 | 管道函数 | 说明 |
 |--------|----------|------|
-| `fetch` | `runFetchPipeline()` | **全量采集**：GDELT 全分类 + RSS → 入库 → 聚类 → 评分 → **自动晋升**（满足阈值）→ 归档过期事件 |
+| `fetch` | `runFetchPipeline()` | **全量采集**：GDELT 主题/区域查询 + USGS + 可选 Valyu → 入库 → 聚类 → 候选评分 → 归档过期事件 |
+| `fetch-hot-trend` | `runHotTrendFetchPipeline()` | **热榜采集**：NewsNow 多平台热榜 → 入库 → 聚类 → 候选评分 |
+| `fetch-rss` | `runRssFetchPipeline({ force: true })` | **RSS 采集**：强制拉取全部已启用 RSS 源 → 入库 → 聚类 → 候选评分 |
 | `tracked` | `runTrackedPipeline()` | **关注事件采集**：按事件 GDELT query 补充报道 |
 | `snapshot` | `runSnapshotPipeline()` | **每日快照**：为 tracking 事件生成热度与文章数快照（非外部拉取，基于已有数据） |
 
-手动触发时还可选 `all`，依次执行 fetch → tracked → snapshot。
+手动触发时还可选 `all`，依次执行 fetch → fetch-hot-trend → fetch-rss → tracked → snapshot。
 
 ---
 
@@ -232,11 +238,13 @@ pnpm --filter @event-time-line/worker dev
 适合本地开发或调试，执行完即退出：
 
 ```bash
-# 默认：全量采集（GDELT + RSS）
+# 默认：全量采集（GDELT + USGS + 可选 Valyu）
 pnpm worker:run
 
 # 指定任务
 pnpm --filter @event-time-line/worker run:once fetch
+pnpm --filter @event-time-line/worker run:once fetch-hot-trend
+pnpm --filter @event-time-line/worker run:once fetch-rss
 pnpm --filter @event-time-line/worker run:once tracked
 pnpm --filter @event-time-line/worker run:once snapshot
 pnpm --filter @event-time-line/worker run:once all
@@ -246,7 +254,7 @@ pnpm --filter @event-time-line/worker run:once all
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/collection/trigger` | Body: `{ "job": "fetch" \| "tracked" \| "snapshot" \| "all" }` |
+| POST | `/api/v1/collection/trigger` | Body: `{ "job": "fetch" \| "fetch-hot-trend" \| "fetch-rss" \| "tracked" \| "snapshot" \| "all" }` |
 | GET | `/api/v1/collection/runs` | 采集历史列表 |
 | GET | `/api/v1/collection/runs/:id` | 单条采集详情 |
 | GET/PUT | `/api/v1/collection/settings` | 读取/更新调度频率 |
@@ -259,22 +267,22 @@ pnpm --filter @event-time-line/worker run:once all
 
 | 页面 | 路径 | 功能 |
 |------|------|------|
-| 采集记录 | `/collection` | 查看历史、手动触发 fetch / tracked / snapshot / all |
-| 设置 | `/settings` | 配置三类任务的定时频率 |
+| 采集记录 | `/collection` | 查看历史、手动触发 fetch / fetch-hot-trend / fetch-rss / tracked / snapshot / all |
+| 设置 | `/settings` | 配置数据源、RSS 源和采集频率 |
 
 ---
 
 ## 5. 采集后的处理流程
 
-全量采集（`fetch`）在拉取数据后依次执行：
+采集任务在拉取数据后进入统一的入库与聚类流程：
 
 ```mermaid
 flowchart TD
-    A[fetchAllGdelt] --> B[ingestArticles 去重入库]
-    C[fetchAllRss] --> B
-    B --> D[clusterRawArticles 标题相似度聚类]
-    D --> E[scoreAllCandidates 候选评分]
-    E --> F[promoteEligibleEvents 满足阈值则晋升]
+    A[fetchAllGdelt / fetchUsgsEarthquakes / fetchAllValyu] --> B[ingestArticles 去重入库]
+    C[fetchDueRss] --> B
+    D[fetchAllHotTrends] --> B
+    B --> E[clusterRawArticles 标题相似度聚类]
+    E --> F[scoreAllCandidates 候选评分]
     F --> G[archiveStaleEvents 归档过期事件]
 ```
 
@@ -289,13 +297,14 @@ flowchart TD
 - 基于 PostgreSQL `pg_trgm` 标题相似度
 - 相似度 > 0.35 合并到已有事件；否则创建候选簇（`hotspot_candidates`）
 
-**评分与自动晋升**：
+**评分、追踪与订阅**：
 
-- 全量采集结束时调用 `promoteEligibleEvents()`，阈值见 `PROMOTE_THRESHOLDS`（最少 3 源、24h 内 5 篇文章、热度 ≥ 35）
-- 满足条件的候选自动进入 `tracking` 状态，并写入 `event_queries`，后续由 `tracked` 任务持续采集
-- **手动晋升**（不经过 pipeline）：在候选池点击「加入关注」，调用 `POST /api/v1/candidates/:id/track`，效果与自动晋升相同，但不校验阈值
+- 采集结束时调用 `scoreAllCandidates()`，更新候选事件与候选池的 `heat_score`
+- Worker 不再自动把候选事件改为 `tracking`；热度分、媒体数和近期文章量只作为管理员判断依据
+- **管理员追踪**：在候选池调用 `POST /api/v1/candidates/:id/track`，或在热榜调用 `POST /api/v1/hot-trends/track`，将事件设为 `tracking` 并写入 `event_queries`
+- **用户订阅**：登录用户通过 `/api/v1/me/subscriptions/*` 订阅已追踪事件，订阅不改变事件自身生命周期
 
-> 自动晋升**仍在使用**，尚未移除。系统说明详见 Web「系统说明」页 `/guide` 的「候选晋升」章节。
+> `events_promoted` 字段仍保留在采集记录结构中，但当前主流程不再由 Worker 自动晋升候选。
 
 ---
 

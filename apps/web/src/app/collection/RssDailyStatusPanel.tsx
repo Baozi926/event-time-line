@@ -24,7 +24,7 @@ function SummaryStat({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2">
+    <div className="rounded-xl border border-blue-100/80 bg-gradient-to-br from-blue-50/40 to-white px-3 py-2 shadow-sm">
       <p className="text-[11px] font-medium text-slate-500">{label}</p>
       <p
         className={`mt-0.5 text-lg font-semibold tabular-nums leading-tight ${
@@ -48,7 +48,7 @@ export function RssDailyStatusPanel({
 
   return (
     <section className="card overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-blue-50 bg-gradient-to-r from-blue-50/30 to-orange-50/20 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <p className="text-sm font-medium text-slate-700">
             {formatDateLabel(summary.date)} · 全量任务执行 {summary.pipelineRuns} 次
@@ -98,7 +98,7 @@ export function RssDailyStatusPanel({
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <thead className="border-b border-blue-100 bg-gradient-to-r from-blue-50/60 to-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="min-w-[12rem] px-5 py-3.5">订阅源</th>
                 <th className="whitespace-nowrap px-5 py-3.5 text-right" title="今日从该 RSS 拉取到的文章条数">

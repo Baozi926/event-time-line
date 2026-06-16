@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { TrackingHistoryEntry } from '@event-time-line/shared';
+import { categoryLabel } from '@/lib/filterLabels';
 import {
   ACTION_LABELS,
   ACTION_STYLES,
@@ -52,7 +53,7 @@ export function TrackingHistoryTable({
                       </p>
                       {entry.event.categoryHint && (
                         <p className="mt-0.5 text-xs text-slate-400">
-                          {entry.event.categoryHint}
+                          {categoryLabel(entry.event.categoryHint)}
                         </p>
                       )}
                     </div>

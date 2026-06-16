@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { eventRoutes } from './routes/events.js';
@@ -13,19 +14,34 @@ import { statsRoutes } from './routes/stats.js';
 import { trackingHistoryRoutes } from './routes/tracking-history.js';
 import { hotTrendRoutes } from './routes/hot-trends.js';
 import { dataSourcesSettingsRoutes } from './routes/data-sources-settings.js';
+import { authRoutes } from './routes/auth.js';
+import { subscriptionRoutes } from './routes/subscriptions.js';
+import { attachUser } from './auth/middleware.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
 
 const port = Number(process.env.API_PORT ?? 3001);
+const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
 
 const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: true });
+await app.register(cors, {
+  origin: webOrigin,
+  credentials: true,
+});
+
+await app.register(cookie, {
+  secret: process.env.SESSION_SECRET ?? 'dev-session-secret-change-me',
+});
+
+app.addHook('onRequest', async (req) => {
+  await attachUser(req);
+});
 
 await app.register(swagger, {
   openapi: {
     info: {
-      title: 'Event Timeline API',
+      title: '拾光纪 API',
       description: '热点事件历史 API',
       version: '0.1.0',
     },
@@ -38,6 +54,8 @@ await app.register(swaggerUi, {
 
 app.get('/health', async () => ({ status: 'ok' }));
 
+await app.register(authRoutes);
+await app.register(subscriptionRoutes);
 await app.register(eventRoutes);
 await app.register(candidateRoutes);
 await app.register(collectionRoutes);

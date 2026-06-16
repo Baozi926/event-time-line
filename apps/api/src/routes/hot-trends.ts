@@ -10,6 +10,7 @@ import {
   isHotTrendEnabled,
 } from '@event-time-line/worker/hot-trend';
 import { readDataSourcesSettings } from '../services/data-sources-settings.js';
+import { requireAdmin, requireUser } from '../auth/middleware.js';
 import {
   boardsFromCollectionRuns,
   boardsFromLiveResults,
@@ -122,6 +123,81 @@ async function trackEvent(eventId: string, title: string): Promise<void> {
   }
 }
 
+async function findOrCreatePersonalHotTrendEvent(input: {
+  platformId: string;
+  platformName: string;
+  title: string;
+  url: string;
+  rank?: number;
+}): Promise<string> {
+  const clusterKey = clusterKeyFromTitle(input.title);
+
+  const candidate = await query<{ event_id: string | null }>(
+    `SELECT event_id FROM hotspot_candidates
+     WHERE cluster_key = $1 AND event_id IS NOT NULL
+     LIMIT 1`,
+    [clusterKey],
+  );
+  if (candidate.rows[0]?.event_id) {
+    return candidate.rows[0].event_id;
+  }
+
+  const existingEvent = await query<{ id: string }>(
+    `SELECT id
+     FROM events
+     WHERE lower(title) = lower($1)
+        OR similarity(title, $1) > 0.55
+     ORDER BY CASE WHEN lower(title) = lower($1) THEN 1 ELSE similarity(title, $1) END DESC
+     LIMIT 1`,
+    [input.title],
+  );
+  if (existingEvent.rows[0]) {
+    return existingEvent.rows[0].id;
+  }
+
+  const now = new Date().toISOString();
+  const slug = await uniqueSlug(input.title);
+  const heatScore = Math.max(1, 101 - (input.rank ?? 100));
+  const created = await query<{ id: string }>(
+    `INSERT INTO events (
+       slug, title, summary, tracking_status, confidence, heat_score,
+       article_count, source_count, first_seen_at, last_updated_at, raw_payload
+     )
+     VALUES ($1, $2, $3, 'candidate', 'medium', $4, 0, 1, $5, $5, $6::jsonb)
+     RETURNING id`,
+    [
+      slug,
+      input.title,
+      `来自${input.platformName}的平台热榜，已加入个人关注。`,
+      heatScore,
+      now,
+      JSON.stringify({
+        sourceType: 'hot_trend',
+        platformId: input.platformId,
+        platformName: input.platformName,
+        url: input.url,
+        rank: input.rank ?? null,
+      }),
+    ],
+  );
+
+  const eventId = created.rows[0].id;
+  await query(
+    `INSERT INTO hotspot_candidates (
+       cluster_key, title, event_id, status, heat_score, article_count,
+       source_count, first_seen_at, last_seen_at
+     )
+     VALUES ($1, $2, $3, 'open', $4, 0, 1, $5, $5)
+     ON CONFLICT (cluster_key) DO UPDATE SET
+       event_id = COALESCE(hotspot_candidates.event_id, EXCLUDED.event_id),
+       last_seen_at = NOW(),
+       updated_at = NOW()`,
+    [clusterKey, input.title, eventId, heatScore, now],
+  );
+
+  return eventId;
+}
+
 export async function hotTrendRoutes(app: FastifyInstance) {
   app.get('/api/v1/hot-trends', {
     schema: {
@@ -194,6 +270,57 @@ export async function hotTrendRoutes(app: FastifyInstance) {
     };
   });
 
+  app.post('/api/v1/hot-trends/subscribe', {
+    schema: {
+      tags: ['hot-trends'],
+      body: {
+        type: 'object',
+        required: ['platformId', 'title', 'url'],
+        properties: {
+          platformId: { type: 'string', minLength: 1 },
+          platformName: { type: 'string' },
+          title: { type: 'string', minLength: 1 },
+          url: { type: 'string', minLength: 1 },
+          rank: { type: 'integer', minimum: 1 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    if (!requireUser(req, reply)) return;
+
+    const body = req.body as {
+      platformId: string;
+      platformName?: string;
+      title: string;
+      url: string;
+      rank?: number;
+    };
+
+    const title = body.title.trim().slice(0, 300);
+    if (!title) {
+      return reply.status(400).send({ error: 'Title is required' });
+    }
+
+    const platform = HOT_TREND_PLATFORMS.find((p) => p.id === body.platformId);
+    const platformName = body.platformName?.trim() || platform?.name || body.platformId;
+    const eventId = await findOrCreatePersonalHotTrendEvent({
+      platformId: body.platformId,
+      platformName,
+      title,
+      url: body.url,
+      rank: body.rank,
+    });
+
+    await query(
+      `INSERT INTO subscriptions (user_id, event_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, event_id) DO NOTHING`,
+      [req.user.id, eventId],
+    );
+
+    return { success: true, eventId };
+  });
+
   app.post('/api/v1/hot-trends/track', {
     schema: {
       tags: ['hot-trends'],
@@ -210,6 +337,8 @@ export async function hotTrendRoutes(app: FastifyInstance) {
       },
     },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const body = req.body as {
       platformId: string;
       platformName?: string;

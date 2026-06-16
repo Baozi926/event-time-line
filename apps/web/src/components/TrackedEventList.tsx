@@ -6,7 +6,7 @@ import { EventCard } from '@/components/EventCard';
 import { InfiniteScrollFooter } from '@/components/ui/InfiniteScrollFooter';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useListScrollRestore } from '@/hooks/useListScrollRestore';
-import { fetchEventsClient, LIST_PAGE_SIZE } from '@/lib/api';
+import { fetchMySubscriptionsClient, LIST_PAGE_SIZE } from '@/lib/api';
 import { FOLLOWING_SCROLL_KEY } from '@/lib/followingNavigation';
 
 export function TrackedEventList({
@@ -45,7 +45,7 @@ export function TrackedEventList({
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchEventsClient({
+      const data = await fetchMySubscriptionsClient({
         sort,
         ...filters,
         limit: LIST_PAGE_SIZE,

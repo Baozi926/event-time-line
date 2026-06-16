@@ -14,7 +14,7 @@ export function CollectionRunsTable({ runs }: { runs: CollectionRun[] }) {
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead className="border-b border-blue-100 bg-gradient-to-r from-blue-50/60 to-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="whitespace-nowrap px-5 py-3.5">开始时间</th>
               <th className="whitespace-nowrap px-5 py-3.5">任务</th>
@@ -42,8 +42,8 @@ export function CollectionRunsTable({ runs }: { runs: CollectionRun[] }) {
                 key={run.id}
                 className={
                   run.status === 'running'
-                    ? 'bg-blue-50/40'
-                    : 'hover:bg-slate-50/80'
+                    ? 'bg-blue-50/50'
+                    : 'transition-colors hover:bg-blue-50/30'
                 }
               >
                 <td className="whitespace-nowrap px-5 py-3.5 tabular-nums text-slate-600">

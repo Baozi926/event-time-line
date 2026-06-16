@@ -11,7 +11,7 @@ export type FollowingFilterState = Pick<
 export function buildFollowingListPath(
   filters: FollowingFilterState = {},
 ): string {
-  return buildListPath('/', filters);
+  return buildListPath('/', filters, { defaultSort: 'subscribed' });
 }
 
 export function buildEventDetailPath(slug: string, listPath: string): string {

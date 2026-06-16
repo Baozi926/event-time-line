@@ -1,25 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { query, recordTrackingHistory } from '@event-time-line/database';
+import { query } from '@event-time-line/database';
 import type { CandidateArticleSummary, HotspotCandidate } from '@event-time-line/shared';
 import { mapCandidate, mapCandidateArticle } from '../mappers.js';
 import { mapFacetRows } from '../event-filter-sql.js';
+import { requireAdmin } from '../auth/middleware.js';
+import { promoteCandidateToTracking } from '../services/candidate-tracking.js';
 
 const MAX_ARTICLES_LIST = 5;
 const MAX_ARTICLES_DETAIL = 50;
-
-function extractKeywords(title: string): string[] {
-  return title
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 4)
-    .slice(0, 5);
-}
-
-function buildQuery(keywords: string[]): string {
-  if (keywords.length === 0) return '';
-  if (keywords.length === 1) return `"${keywords[0]}"`;
-  return `(${keywords.map((k) => `"${k}"`).join(' OR ')})`;
-}
 
 const ARTICLE_COUNTRY = 'COALESCE(a.country_code, s.country_code)';
 
@@ -97,6 +85,7 @@ export async function candidateRoutes(app: FastifyInstance) {
       querystring: {
         type: 'object',
         properties: {
+          sort: { type: 'string', enum: ['heat', 'recent', 'updated'] },
           category: { type: 'string' },
           country: { type: 'string', minLength: 2, maxLength: 2 },
           language: { type: 'string', minLength: 2, maxLength: 2 },
@@ -107,12 +96,14 @@ export async function candidateRoutes(app: FastifyInstance) {
     },
   }, async (req) => {
     const {
+      sort = 'heat',
       category,
       country,
       language,
       limit = 30,
       offset = 0,
     } = req.query as {
+      sort?: string;
       category?: string;
       country?: string;
       language?: string;
@@ -123,6 +114,13 @@ export async function candidateRoutes(app: FastifyInstance) {
     const categoryFilter = category || null;
     const countryFilter = country?.toUpperCase() || null;
     const languageFilter = language?.toLowerCase().slice(0, 2) || null;
+    const orderBy =
+      sort === 'recent'
+        ? 'hc.first_seen_at DESC'
+        : sort === 'updated'
+          ? 'hc.last_seen_at DESC'
+          : 'hc.heat_score DESC, hc.last_seen_at DESC';
+    const userId = req.user?.id ?? null;
 
     const listFilterClause = `
       AND ($3::text IS NULL OR hc.category_hint = $3)
@@ -142,6 +140,11 @@ export async function candidateRoutes(app: FastifyInstance) {
                 e.summary AS event_summary,
                 dominant.country_code AS primary_country_code,
                 dominant_lang.language_code AS primary_language_code,
+                ($6::uuid IS NOT NULL AND EXISTS (
+                  SELECT 1
+                  FROM subscriptions sub
+                  WHERE sub.user_id = $6::uuid AND sub.event_id = e.id
+                )) AS subscribed,
                 (
                   SELECT array_agg(DISTINCT cc ORDER BY cc)
                   FROM (
@@ -154,9 +157,9 @@ export async function candidateRoutes(app: FastifyInstance) {
                 ) AS country_codes
          ${CANDIDATE_BASE_FROM}
          ${listFilterClause}
-         ORDER BY hc.heat_score DESC
+         ORDER BY ${orderBy}
          LIMIT $1 OFFSET $2`,
-        [limit, offset, categoryFilter, countryFilter, languageFilter],
+        [limit, offset, categoryFilter, countryFilter, languageFilter, userId],
       ),
       query(
         `SELECT COUNT(*)::text AS count
@@ -219,6 +222,7 @@ export async function candidateRoutes(app: FastifyInstance) {
     schema: { tags: ['candidates'] },
   }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    const userId = req.user?.id ?? null;
 
     const rows = await query(
       `SELECT hc.*,
@@ -226,6 +230,11 @@ export async function candidateRoutes(app: FastifyInstance) {
               e.summary AS event_summary,
               dominant.country_code AS primary_country_code,
               dominant_lang.language_code AS primary_language_code,
+              ($2::uuid IS NOT NULL AND EXISTS (
+                SELECT 1
+                FROM subscriptions sub
+                WHERE sub.user_id = $2::uuid AND sub.event_id = e.id
+              )) AS subscribed,
               (
                 SELECT array_agg(DISTINCT cc ORDER BY cc)
                 FROM (
@@ -238,7 +247,7 @@ export async function candidateRoutes(app: FastifyInstance) {
               ) AS country_codes
        ${CANDIDATE_BASE_FROM}
        AND hc.id = $1`,
-      [id],
+      [id, userId],
     );
 
     if (!rows.rows[0]) {
@@ -263,38 +272,13 @@ export async function candidateRoutes(app: FastifyInstance) {
   app.post('/api/v1/candidates/:id/track', {
     schema: { tags: ['candidates'] },
   }, async (req, reply) => {
-    const { id } = req.params as { id: string };
+    if (!requireAdmin(req, reply)) return;
 
-    const candidate = await query<{ event_id: string; title: string }>(
-      'SELECT event_id, title FROM hotspot_candidates WHERE id = $1',
-      [id],
-    );
-    if (!candidate.rows[0]?.event_id) {
+    const { id } = req.params as { id: string };
+    const eventId = await promoteCandidateToTracking(id);
+    if (!eventId) {
       return reply.status(404).send({ error: 'Candidate not found' });
     }
-
-    const eventId = candidate.rows[0].event_id;
-    const keywords = extractKeywords(candidate.rows[0].title);
-
-    await query(
-      `UPDATE events SET tracking_status = 'tracking', updated_at = NOW() WHERE id = $1`,
-      [eventId],
-    );
-
-    const existing = await query('SELECT 1 FROM event_queries WHERE event_id = $1', [eventId]);
-    if (existing.rows.length === 0) {
-      await query(
-        `INSERT INTO event_queries (event_id, keywords, gdelt_query) VALUES ($1, $2, $3)`,
-        [eventId, keywords, buildQuery(keywords)],
-      );
-    }
-
-    await query(
-      `UPDATE hotspot_candidates SET status = 'promoted', updated_at = NOW() WHERE id = $1`,
-      [id],
-    );
-
-    await recordTrackingHistory(eventId, 'tracked', 'manual');
 
     return { success: true, eventId };
   });
@@ -302,6 +286,8 @@ export async function candidateRoutes(app: FastifyInstance) {
   app.post('/api/v1/candidates/:id/archive', {
     schema: { tags: ['candidates'] },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const { id } = req.params as { id: string };
 
     const candidate = await query<{ event_id: string }>(

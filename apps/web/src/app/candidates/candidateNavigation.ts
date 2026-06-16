@@ -5,7 +5,7 @@ export const CANDIDATES_SCROLL_KEY = 'candidates-list-scroll';
 
 export type CandidatesFilterState = Pick<
   ListFilterState,
-  'category' | 'country' | 'language'
+  'category' | 'country' | 'language' | 'sort'
 >;
 
 export function buildCandidatesListPath(
@@ -37,10 +37,12 @@ export function parseCandidatesListFilters(
     const category = url.searchParams.get('category') ?? undefined;
     const country = url.searchParams.get('country') ?? undefined;
     const language = url.searchParams.get('language') ?? undefined;
+    const sort = url.searchParams.get('sort') ?? undefined;
     return {
       ...(category ? { category } : {}),
       ...(country ? { country } : {}),
       ...(language ? { language } : {}),
+      ...(sort ? { sort } : {}),
     };
   } catch {
     return {};

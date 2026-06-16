@@ -11,6 +11,7 @@ import {
 } from '@event-time-line/shared';
 import { createRssFeed, deleteRssFeed, getCollectionSchedule, updateRssFeed } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 function formatFeedIntervalLabel(minutes: number | null): string {
   if (minutes == null) return '全局默认';
@@ -36,6 +37,7 @@ export function RssFeedsManager({
   const [language, setLanguage] = useState('en');
   const [loading, setLoading] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingDeleteFeed, setPendingDeleteFeed] = useState<RssFeed | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,9 +106,11 @@ export function RssFeedsManager({
     }
   }
 
-  async function handleDelete(feed: RssFeed) {
-    if (!window.confirm(`确定删除「${feed.name}」？`)) return;
+  async function confirmDelete() {
+    if (!pendingDeleteFeed) return;
 
+    const feed = pendingDeleteFeed;
+    setPendingDeleteFeed(null);
     setPendingId(feed.id);
     setMessage(null);
     setError(null);
@@ -125,8 +129,8 @@ export function RssFeedsManager({
 
   return (
     <section className="card">
-      <div className="border-b border-slate-100 px-5 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">RSS 订阅源</h2>
+      <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
+        <h2 className="text-sm font-bold text-slate-900">RSS 订阅源</h2>
         <p className="mt-0.5 text-xs text-slate-500">
           Worker 按各 Feed 的采集间隔独立拉取；未单独配置时使用全局默认（
           {formatMinutesLabel(
@@ -195,7 +199,7 @@ export function RssFeedsManager({
                 {!feed.isBuiltin && (
                   <button
                     type="button"
-                    onClick={() => handleDelete(feed)}
+                    onClick={() => setPendingDeleteFeed(feed)}
                     disabled={pendingId === feed.id}
                     className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
@@ -266,6 +270,22 @@ export function RssFeedsManager({
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteFeed)}
+        title="确定删除这个 RSS Feed？"
+        description={
+          pendingDeleteFeed
+            ? `删除「${pendingDeleteFeed.name}」后，后续采集将不再读取这个来源。`
+            : undefined
+        }
+        confirmLabel="删除"
+        cancelLabel="保留"
+        variant="destructive"
+        loading={Boolean(pendingDeleteFeed && pendingId === pendingDeleteFeed.id)}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDeleteFeed(null)}
+      />
     </section>
   );
 }

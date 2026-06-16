@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes, scryptSync } from 'node:crypto';
 import {
   DEFAULT_RSS_FEEDS,
   DEFAULT_COLLECTION_SCHEDULE,
@@ -10,6 +11,33 @@ import {
 import { query, closePool } from './client.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64);
+  return `${salt.toString('hex')}:${hash.toString('hex')}`;
+}
+
+async function seedAdminUser() {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.log('Skipping admin seed (set ADMIN_EMAIL and ADMIN_PASSWORD in .env)');
+    return;
+  }
+
+  const passwordHash = hashPassword(password);
+  await query(
+    `INSERT INTO users (email, display_name, password_hash, role)
+     VALUES ($1, '管理员', $2, 'admin')
+     ON CONFLICT (email) DO UPDATE SET
+       password_hash = EXCLUDED.password_hash,
+       role = 'admin',
+       updated_at = NOW()`,
+    [email, passwordHash],
+  );
+  console.log(`Admin user ready: ${email}`);
+}
 
 const TIER1_DOMAINS = [
   { domain: 'reuters.com', name: 'Reuters', tier: 'tier1' },
@@ -27,6 +55,8 @@ const TIER1_DOMAINS = [
 ];
 
 async function seed() {
+  console.log('Seeding admin user...');
+  await seedAdminUser();
   console.log('Seeding tier-1 sources...');
   for (const s of TIER1_DOMAINS) {
     await query(

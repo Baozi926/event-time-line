@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, recordTrackingHistory } from '@event-time-line/database';
 import { mapArticle, mapEvent, mapSnapshot } from '../mappers.js';
+import { requireAdmin } from '../auth/middleware.js';
 import {
   EVENT_COUNT_FILTER_CLAUSE,
   EVENT_DOMINANT_JOINS,
@@ -125,7 +126,18 @@ export async function eventRoutes(app: FastifyInstance) {
     schema: { tags: ['events'] },
   }, async (req, reply) => {
     const { slug } = req.params as { slug: string };
-    const res = await query('SELECT * FROM events WHERE slug = $1', [slug]);
+    const userId = req.user?.id ?? null;
+    const res = await query(
+      `SELECT e.*,
+              ($2::uuid IS NOT NULL AND EXISTS (
+                SELECT 1
+                FROM subscriptions sub
+                WHERE sub.user_id = $2::uuid AND sub.event_id = e.id
+              )) AS subscribed
+       FROM events e
+       WHERE e.slug = $1`,
+      [slug, userId],
+    );
     if (!res.rows[0]) {
       return reply.status(404).send({ error: 'Event not found' });
     }
@@ -174,6 +186,8 @@ export async function eventRoutes(app: FastifyInstance) {
   app.post('/api/v1/events/:slug/untrack', {
     schema: { tags: ['events'] },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const { slug } = req.params as { slug: string };
 
     const event = await query<{ id: string; tracking_status: string }>(

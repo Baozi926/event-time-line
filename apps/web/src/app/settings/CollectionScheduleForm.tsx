@@ -67,8 +67,8 @@ export function CollectionScheduleForm({
 
   return (
     <section className="card">
-      <div className="border-b border-slate-100 px-5 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">采集调度</h2>
+      <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
+        <h2 className="text-sm font-bold text-slate-900">采集调度</h2>
         <p className="mt-0.5 text-xs text-slate-500">
           Worker 按以下频率自动执行；修改后约 30 秒内生效
         </p>
@@ -91,7 +91,7 @@ export function CollectionScheduleForm({
                 [key]: Number(e.target.value),
               }))}
               disabled={loading}
-              className="mt-2 w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 sm:w-72"
+              className="mt-2 w-full max-w-md rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 sm:w-72"
             >
               {(key === 'snapshotIntervalHours'
                 ? COLLECTION_SCHEDULE_OPTIONS.snapshotIntervalHours

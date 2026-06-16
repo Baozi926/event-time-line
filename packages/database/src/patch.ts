@@ -51,6 +51,22 @@ const patches = [
   `CREATE INDEX IF NOT EXISTS idx_tracking_history_event ON tracking_history (event_id, created_at DESC)`,
   `ALTER TABLE articles ADD COLUMN IF NOT EXISTS feed_url VARCHAR(2048)`,
   `CREATE INDEX IF NOT EXISTS idx_articles_feed_url ON articles (feed_url, fetched_at DESC) WHERE feed_url IS NOT NULL`,
+  `DO $$ BEGIN
+     CREATE TYPE user_role AS ENUM ('admin', 'user');
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS role user_role NOT NULL DEFAULT 'user'`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash  VARCHAR(64) NOT NULL UNIQUE,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)`,
 ];
 
 async function patch() {

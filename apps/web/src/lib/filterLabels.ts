@@ -1,13 +1,15 @@
+import {
+  GDELT_CATEGORY_LABELS,
+  HOT_TREND_PLATFORMS,
+} from '@event-time-line/shared';
+
+const HOT_TREND_LABELS = Object.fromEntries(
+  HOT_TREND_PLATFORMS.map((p) => [p.id, p.name]),
+);
+
 export const CATEGORY_LABELS: Record<string, string> = {
-  politics: '政治',
-  disaster: '灾害',
-  conflict: '冲突',
-  tech: '科技',
-  economy: '财经',
-  society: '社会',
-  health: '健康',
-  environment: '环境',
-  sports: '运动',
+  ...GDELT_CATEGORY_LABELS,
+  ...HOT_TREND_LABELS,
   rss: 'RSS',
   tracked: '关注',
 };

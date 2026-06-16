@@ -3,6 +3,7 @@ import { query } from '@event-time-line/database';
 import { MAX_RSS_FEEDS, RSS_FEED_INTERVAL_OPTIONS, type CreateRssFeedInput, type UpdateRssFeedInput } from '@event-time-line/shared';
 import { mapRssFeed } from '../mappers.js';
 import { extractDomainFromUrl, probeFeedUrl, validateFeedUrl } from '../utils/feed-url.js';
+import { requireAdmin } from '../auth/middleware.js';
 
 function normalizeLanguage(lang?: string): string {
   const value = (lang ?? 'en').trim().toLowerCase().slice(0, 10);
@@ -36,6 +37,8 @@ export async function rssFeedRoutes(app: FastifyInstance) {
   app.post('/api/v1/rss-feeds', {
     schema: { tags: ['rss-feeds'] },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const body = (req.body ?? {}) as CreateRssFeedInput;
     const name = normalizeName(body.name ?? '');
     if (!name) {
@@ -81,6 +84,8 @@ export async function rssFeedRoutes(app: FastifyInstance) {
   app.patch('/api/v1/rss-feeds/:id', {
     schema: { tags: ['rss-feeds'] },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as UpdateRssFeedInput;
 
@@ -145,6 +150,8 @@ export async function rssFeedRoutes(app: FastifyInstance) {
   app.delete('/api/v1/rss-feeds/:id', {
     schema: { tags: ['rss-feeds'] },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const { id } = req.params as { id: string };
 
     const existing = await query<{ is_builtin: boolean }>(

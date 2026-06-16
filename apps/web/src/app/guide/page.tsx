@@ -1,8 +1,5 @@
 import Link from 'next/link';
-import {
-  HEAT_WEIGHTS,
-  PROMOTE_THRESHOLDS,
-} from '@event-time-line/shared';
+import { HEAT_WEIGHTS } from '@event-time-line/shared';
 import { GuideNav } from '@/components/GuideNav';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
@@ -16,7 +13,7 @@ import { GuideToc, GuideTocMobile } from './components/GuideToc';
 const PIPELINE_STEPS = [
   {
     title: '采集',
-    desc: 'GDELT + RSS 拉新闻',
+    desc: 'GDELT / RSS / USGS / 热榜',
     href: '/guide/sources',
   },
   {
@@ -29,12 +26,12 @@ const PIPELINE_STEPS = [
   },
   {
     title: '晋升',
-    desc: '候选 → 关注中',
+    desc: '管理员确认追踪',
     href: '#promote',
   },
   {
-    title: '展示',
-    desc: '首页按热度排序',
+    title: '订阅',
+    desc: '用户加入我的关注',
     href: '/',
   },
 ] as const;
@@ -77,15 +74,15 @@ const EVENT_STAGES = [
     status: 'candidate',
     label: '候选',
     color: 'bg-slate-100 text-slate-700 ring-slate-200',
-    desc: '新发现的事件，在候选池观察',
+    desc: '新发现的事件，先进入候选池观察',
     page: { href: '/candidates', label: '候选池' },
   },
   {
     status: 'tracking',
     label: '关注中',
     color: 'bg-brand-50 text-brand-700 ring-brand-200',
-    desc: '晋升后持续采集，出现在首页',
-    page: { href: '/', label: '首页' },
+    desc: '管理员追踪后持续补采，可被用户订阅',
+    page: { href: '/hot', label: '热点页' },
   },
   {
     status: 'archived',
@@ -99,17 +96,47 @@ const COLLECTION_SOURCES = [
   {
     name: 'GDELT DOC',
     tag: '主数据源',
-    desc: '按政治、灾害、冲突等 5 类关键词批量检索全球新闻',
+    desc: '按主题分类和区域冲突查询批量检索全球新闻',
   },
   {
     name: 'RSS 订阅',
     tag: '补充',
-    desc: 'BBC World、Al Jazeera 等主流媒体 Feed',
+    desc: '按全局或单源频率拉取已启用媒体 Feed',
+  },
+  {
+    name: 'USGS 地震',
+    tag: '事件源',
+    desc: '拉取公开地震数据，转成可聚类的事件文章',
+  },
+  {
+    name: '多平台热榜',
+    tag: '热榜',
+    desc: '从 NewsNow 获取微博、知乎、百度等中文热榜',
+  },
+  {
+    name: 'Valyu 新闻搜索',
+    tag: '可选',
+    desc: '配置 API Key 后作为区域热点的补充新闻源',
   },
   {
     name: '关注事件查询',
     tag: '定向',
-    desc: '对已关注事件用专属关键词持续补充报道',
+    desc: '对已追踪事件用专属关键词持续补充报道',
+  },
+] as const;
+
+const ROLE_CAPABILITIES = [
+  {
+    role: '访客',
+    desc: '可以浏览热点、候选池和事件详情；首页会提示登录后订阅。',
+  },
+  {
+    role: '登录用户',
+    desc: '可以把已追踪事件加入「我的关注」，并在首页查看订阅列表和更新。',
+  },
+  {
+    role: '管理员',
+    desc: '可以晋升/归档候选、追踪热榜事件、触发采集、调整数据源和采集计划。',
   },
 ] as const;
 
@@ -131,32 +158,12 @@ function WeightBar({ weight }: { weight: number }) {
   );
 }
 
-function ThresholdCard({
-  value,
-  unit,
-  label,
-}: {
-  value: number;
-  unit?: string;
-  label: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-center">
-      <p className="text-2xl font-bold tabular-nums text-brand-600">
-        ≥ {value}
-        {unit && <span className="ml-0.5 text-base font-medium">{unit}</span>}
-      </p>
-      <p className="mt-1 text-xs text-slate-600">{label}</p>
-    </div>
-  );
-}
-
 export default function GuidePage() {
   return (
     <div>
       <PageHeader
         title="系统说明"
-        description="用几分钟了解：新闻如何变成事件、热度怎么算、候选如何进入首页"
+        description="用几分钟了解：新闻如何变成事件、热度怎么算、候选如何被追踪和订阅"
       />
 
       <GuideNav />
@@ -174,10 +181,10 @@ export default function GuidePage() {
           <section id="overview" className="scroll-mt-24">
             <GuideCard className="bg-gradient-to-br from-brand-50/50 to-white">
               <h2 className="text-base font-semibold text-slate-900">
-                一图看懂：从新闻到首页
+                一图看懂：从新闻到我的关注
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                系统每天（或手动）跑一轮管道，把全球新闻整理成可浏览的热点事件。
+                Worker 定时或手动运行采集管道，把外部新闻整理成候选事件；管理员确认追踪后，登录用户可以订阅到首页。
               </p>
 
               <div className="mt-5 flex flex-wrap items-center gap-2 sm:gap-3">
@@ -278,7 +285,7 @@ export default function GuidePage() {
             id="heat"
             step={2}
             title="热度怎么算"
-            summary="热度是 0–100 的综合分，用于首页排序和自动晋升判断，不是简单的文章计数。"
+            summary="热度是 0–100 的综合分，用于候选池、热点和我的关注排序，不是简单的文章计数。"
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {HEAT_FACTORS.map((f) => (
@@ -312,8 +319,8 @@ export default function GuidePage() {
           <GuideSection
             id="promote"
             step={3}
-            title="候选如何变成「关注中」"
-            summary="晋升后系统会为事件生成关键词，并持续从 GDELT 拉取相关报道。"
+            title="候选如何进入「关注中」"
+            summary="当前逻辑以人工确认为主：管理员负责追踪事件，登录用户负责订阅自己关心的事件。"
           >
             <div className="grid gap-4 lg:grid-cols-2">
               <GuideCard className="border-brand-100 bg-brand-50/30">
@@ -322,28 +329,16 @@ export default function GuidePage() {
                     A
                   </span>
                   <h3 className="text-sm font-semibold text-slate-900">
-                    自动晋升
+                    管理员追踪
                   </h3>
-                  <Badge variant="slate">全量采集后</Badge>
+                  <Badge variant="slate">候选池 / 热榜</Badge>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                  每次采集结束时，<strong className="font-medium text-slate-800">同时满足</strong>以下三个条件的事件会自动升级：
+                  管理员在候选池点击「加入关注」，或在热榜里点击追踪后，事件会从候选状态变为关注中，并写入后续补采关键词。
                 </p>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <ThresholdCard
-                    value={PROMOTE_THRESHOLDS.minSourceCount}
-                    label="独立媒体数"
-                  />
-                  <ThresholdCard
-                    value={PROMOTE_THRESHOLDS.minHeatScore}
-                    label="热度分数"
-                  />
-                  <ThresholdCard
-                    value={PROMOTE_THRESHOLDS.minArticleCount24h}
-                    unit="篇"
-                    label="24h 新文章"
-                  />
-                </div>
+                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                  热度分、媒体数和近期文章量用于辅助判断，但不会绕过管理员确认。
+                </p>
               </GuideCard>
 
               <GuideCard>
@@ -352,31 +347,50 @@ export default function GuidePage() {
                     B
                   </span>
                   <h3 className="text-sm font-semibold text-slate-900">
-                    手动晋升
+                    用户订阅
                   </h3>
-                  <Badge variant="slate">随时</Badge>
+                  <Badge variant="slate">登录后</Badge>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                  在候选池对任意事件点击「加入关注」，<strong className="font-medium text-slate-800">无需满足</strong>上述阈值，立即进入关注列表。
+                  登录用户可以把已追踪事件订阅到「我的关注」。首页默认展示个人订阅列表，管理员还可以切换查看追踪历史。
                 </p>
                 <Link
-                  href="/candidates"
+                  href="/"
                   className="mt-4 inline-flex items-center gap-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
                 >
-                  打开候选池 →
+                  打开我的关注 →
                 </Link>
               </GuideCard>
             </div>
           </GuideSection>
 
-          {/* 4. 采集 */}
+          {/* 4. 权限 */}
+          <GuideSection
+            id="roles"
+            step={4}
+            title="谁能做什么"
+            summary="系统按访客、登录用户和管理员分层，写操作都需要对应身份。"
+          >
+            <div className="grid gap-3 lg:grid-cols-3">
+              {ROLE_CAPABILITIES.map((item) => (
+                <GuideCard key={item.role}>
+                  <p className="text-sm font-semibold text-slate-900">{item.role}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    {item.desc}
+                  </p>
+                </GuideCard>
+              ))}
+            </div>
+          </GuideSection>
+
+          {/* 5. 采集 */}
           <GuideSection
             id="collection"
-            step={4}
+            step={5}
             title="数据从哪来"
-            summary="三种采集手段，由 Worker 定时或手动触发。"
+            summary="多种数据源由 Worker 定时或手动触发；热榜有独立任务，也可以在设置里开关。"
           >
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {COLLECTION_SOURCES.map((src) => (
                 <GuideCard key={src.name}>
                   <div className="flex items-center gap-2">
@@ -402,10 +416,10 @@ export default function GuidePage() {
             </Link>
           </GuideSection>
 
-          {/* 5. 来源分级 */}
+          {/* 6. 来源分级 */}
           <GuideSection
             id="sources"
-            step={5}
+            step={6}
             title="媒体可信度分级"
             summary="每条新闻关联一个媒体域名，分级影响热度中的「媒体权威」因子。"
           >

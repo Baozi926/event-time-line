@@ -1,6 +1,6 @@
 # 数据筛选维度说明
 
-本文档专门描述 Event Timeline 中**数据的筛选维度**：每个维度代表什么、数据从哪来、在哪些页面/API 可用，以及维度之间如何联动。
+本文档专门描述拾光纪中**数据的筛选维度**：每个维度代表什么、数据从哪来、在哪些页面/API 可用，以及维度之间如何联动。
 
 > 相关文档：[数据模型](data-model.md) · [MVP 数据流](mvp-flow.md) · [数据源评估](data-sources-evaluation.md)
 
@@ -163,7 +163,7 @@ LIMIT 1
 | 值 | 中文 | 含义 | 默认展示位置 |
 |----|------|------|--------------|
 | `candidate` | 候选 | 新聚类事件，观察期 | 候选池 `/candidates` |
-| `tracking` | 关注中 | 自动晋升（满足阈值）或候选池手动「加入关注」后，持续采集 | 首页 `/` |
+| `tracking` | 关注中 | 管理员从候选池或热榜确认追踪后，持续采集；登录用户可订阅 | 热点 `/hot`、我的关注 `/` |
 | `archived` | 已归档 | 不再主动采集（如 7 天无新报道） | 暂无独立列表 |
 
 对应 `hotspot_candidates.status`：
@@ -174,14 +174,14 @@ LIMIT 1
 | `promoted` | 已晋升关注 |
 | `archived` | 已归档 |
 
-**候选 → 关注（晋升）** 当前有两条路径，均会将 `tracking_status` 设为 `tracking` 并写入 `event_queries`：
+**候选 → 关注中（追踪）** 当前以管理员确认为主，均会将 `tracking_status` 设为 `tracking` 并写入 `event_queries`：
 
 | 路径 | 触发时机 | 是否校验阈值 | 入口 |
 |------|----------|--------------|------|
-| 自动晋升 | 全量采集 pipeline 评分后 | 是（3 源 / 热度 ≥35 / 24h 5 篇） | Worker `promoteEligibleEvents()` |
-| 手动晋升 | 用户在候选池操作 | 否 | `POST /api/v1/candidates/:id/track` |
+| 候选池追踪 | 管理员在候选池操作 | 否，热度分仅辅助判断 | `POST /api/v1/candidates/:id/track` |
+| 热榜追踪 | 管理员在热榜操作 | 否，按热榜条目创建或关联事件 | `POST /api/v1/hot-trends/track` |
 
-> 自动晋升**仍在使用**。采集记录中的 `events_promoted` 字段统计的是自动晋升数量；手动晋升不计入该字段。
+> 当前 Worker 只负责候选评分和过期归档，不再绕过管理员自动追踪候选。登录用户的「订阅」是个人行为，不改变事件的 `tracking_status`。
 
 ### 3.2 事态状态 `status`
 

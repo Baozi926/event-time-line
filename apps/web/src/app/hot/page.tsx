@@ -52,29 +52,42 @@ export default async function HotPage({
   const hasBoardData =
     hotTrends?.boards.some((board) => board.items.length > 0) ?? false;
 
+  const boardCount =
+    hotTrends?.boards.filter((b) => b.items.length > 0).length ?? 0;
+
   return (
     <div className="min-w-0 space-y-8">
       <PageHeader
+        variant="playful"
+        eyebrow="全网热搜一览"
         title="热点榜"
-        description="多平台实时热榜与系统聚合的高热度事件"
-        bordered={false}
-        className="mb-0"
+        description="多平台实时热榜与系统聚合的高热度事件，一眼看清哪里在冒火。"
+        stats={[
+          {
+            label: '平台榜',
+            value: boardCount,
+            accent: 'brand',
+          },
+          {
+            label: '系统热点',
+            value: candidates?.total ?? '-',
+            accent: 'orange',
+          },
+        ]}
       />
 
       <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100/80 bg-white/80 px-4 py-3 shadow-sm backdrop-blur">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-              平台热榜
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-base font-bold text-slate-900">平台热榜</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
               微博、知乎、百度等平台的当前热搜条目
             </p>
           </div>
           <div className="flex items-center gap-2">
             {hotTrends && (
-              <span className="text-xs text-slate-400">
-                数据来源：{SOURCE_LABELS[hotTrends.source]} ·{' '}
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
+                {SOURCE_LABELS[hotTrends.source]} ·{' '}
                 {new Date(hotTrends.fetchedAt).toLocaleString('zh-CN', {
                   month: 'short',
                   day: 'numeric',
@@ -105,7 +118,7 @@ export default async function HotPage({
         {hotTrends && !hasBoardData && hotTrends.enabled && !hotError && (
           <EmptyState
             title="暂无热榜数据"
-            description="请先运行全量采集任务，或点击「实时刷新」直接从 NewsNow 拉取"
+            description="先跑一轮采集，或者点「实时刷新」直接从 NewsNow 拉一把"
           />
         )}
 

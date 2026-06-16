@@ -71,13 +71,19 @@ function SidebarLink({
       href={href}
       className={
         active
-          ? 'flex items-center justify-between rounded-lg bg-brand-50 px-2.5 py-1.5 text-sm font-medium text-brand-700'
-          : 'flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100'
+          ? 'flex items-center justify-between rounded-xl bg-gradient-to-r from-brand-600 to-blue-500 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm'
+          : 'flex items-center justify-between rounded-xl px-2.5 py-1.5 text-sm text-slate-600 transition-colors hover:bg-blue-50 hover:text-brand-700'
       }
     >
       <span>{children}</span>
       {count !== undefined && (
-        <span className="ml-2 tabular-nums text-xs text-slate-400">{count}</span>
+        <span
+          className={`ml-2 tabular-nums text-xs ${
+            active ? 'text-white/75' : 'text-slate-400'
+          }`}
+        >
+          {count}
+        </span>
       )}
     </Link>
   );
@@ -93,6 +99,7 @@ export function ListFilterPanel({
   activeLanguage,
   activeSort,
   sortOptions,
+  defaultSort = 'heat',
   total,
 }: {
   basePath: string;
@@ -104,6 +111,7 @@ export function ListFilterPanel({
   activeLanguage?: string;
   activeSort?: string;
   sortOptions?: SortOption[];
+  defaultSort?: string;
   total: number;
 }) {
   const router = useRouter();
@@ -119,16 +127,16 @@ export function ListFilterPanel({
   const visibleLanguages = visibleFacets(languages, activeLanguage);
 
   const hrefFor = (patch: Partial<Record<keyof ListFilterState, string | null>>) =>
-    buildListPath(basePath, applyPatch(current, patch));
+    buildListPath(basePath, applyPatch(current, patch), { defaultSort });
 
   const navigate = (patch: Partial<Record<keyof ListFilterState, string | null>>) => {
     router.push(hrefFor(patch));
   };
 
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-baseline justify-between gap-2 border-b border-slate-100 pb-3">
-        <h2 className="text-sm font-semibold text-slate-900">筛选</h2>
+    <div className="rounded-[1.25rem] border border-blue-100/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm lg:max-h-[calc(100vh-6rem)]">
+      <div className="mb-4 flex items-baseline justify-between gap-2 border-b border-blue-50 pb-3">
+        <h2 className="text-sm font-bold text-slate-900">筛选</h2>
         <span className="text-xs tabular-nums text-slate-400">
           {filtered ? `${total} 条结果` : `共 ${total} 条`}
         </span>
@@ -141,8 +149,8 @@ export function ListFilterPanel({
               {sortOptions.map((opt) => (
                 <SidebarLink
                   key={opt.value}
-                  href={hrefFor({ sort: opt.value === 'heat' ? null : opt.value })}
-                  active={(activeSort ?? 'heat') === opt.value}
+                  href={hrefFor({ sort: opt.value === defaultSort ? null : opt.value })}
+                  active={(activeSort ?? defaultSort) === opt.value}
                 >
                   {opt.label}
                 </SidebarLink>
@@ -152,7 +160,7 @@ export function ListFilterPanel({
         )}
 
         <FilterSection title="类型">
-          <div className="space-y-0.5">
+          <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1 lg:max-h-[42vh]">
             <SidebarLink
               href={hrefFor({ category: null })}
               active={!activeCategory}
@@ -171,6 +179,11 @@ export function ListFilterPanel({
               </SidebarLink>
             ))}
           </div>
+          {visibleCategories.length > 8 && (
+            <p className="mt-2 text-[11px] text-slate-400">
+              类型较多，这一栏可单独滚动
+            </p>
+          )}
         </FilterSection>
 
         {visibleCountries.length > 0 && (
@@ -209,8 +222,12 @@ export function ListFilterPanel({
 
         {filtered && (
           <Link
-            href={buildListPath(basePath, { sort: activeSort !== 'heat' ? activeSort : undefined })}
-            className="block w-full rounded-lg border border-slate-200 py-1.5 text-center text-sm font-medium text-slate-600 hover:bg-slate-50"
+            href={buildListPath(
+              basePath,
+              { sort: activeSort !== defaultSort ? activeSort : undefined },
+              { defaultSort },
+            )}
+            className="block w-full rounded-xl border border-blue-100 py-1.5 text-center text-sm font-semibold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-brand-700"
           >
             清除筛选
           </Link>

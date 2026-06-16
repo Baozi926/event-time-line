@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { getEvents, getTrackingHistory, LIST_PAGE_SIZE } from '@/lib/api';
+import { redirect } from 'next/navigation';
+import { getMySubscriptions, getTrackingHistory, LIST_PAGE_SIZE } from '@/lib/api';
+import { getMeServer } from '@/lib/auth';
 import { TrackedEventList } from '@/components/TrackedEventList';
 import { buildFollowingListPath } from '@/lib/followingNavigation';
 import { FilterListLayout } from '@/components/filters/FilterListLayout';
 import { ListFilterPanel } from '@/components/filters/ListFilterPanel';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { FollowingTabs } from '@/components/following/FollowingTabs';
@@ -14,6 +15,7 @@ import { TrackingHistoryFilters } from '@/components/following/TrackingHistoryFi
 export const dynamic = 'force-dynamic';
 
 const SORT_OPTIONS = [
+  { value: 'subscribed', label: '最近关注' },
   { value: 'heat', label: '按热度' },
   { value: 'recent', label: '最新发现' },
   { value: 'updated', label: '最近更新' },
@@ -33,20 +35,58 @@ export default async function FollowingPage({
     sort?: string;
   }>;
 }) {
+  const user = await getMeServer();
   const params = await searchParams;
-  const view = params.view === 'history' ? 'history' : 'active';
+  const isAdmin = user?.role === 'admin';
+  const view =
+    isAdmin && params.view === 'history' ? 'history' : 'active';
   const { category, country, language, sort: sortParam, action } = params;
-  const sort = sortParam ?? 'heat';
+  const sort = sortParam ?? 'subscribed';
   const actionFilter =
     action === 'tracked' || action === 'untracked' ? action : undefined;
 
-  let eventsData: Awaited<ReturnType<typeof getEvents>> | null = null;
+  if (!user) {
+    return (
+      <div className="min-w-0 space-y-4">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-blue-100/80 bg-gradient-to-br from-white via-blue-50 to-orange-50 px-5 py-6 shadow-sm sm:px-7">
+          <div className="relative">
+            <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+              我的关注
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+              登录后可以把感兴趣的热点放进自己的关注列表，随时回来查看更新。
+            </p>
+          </div>
+        </section>
+
+        <EmptyState
+          title="请先登录"
+          description="注册或登录账号后，就能在候选池、热点页关注自己喜欢的新闻了"
+        >
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link href="/login" className="btn-primary">
+              登录
+            </Link>
+            <Link href="/register" className="btn-secondary">
+              注册
+            </Link>
+          </div>
+        </EmptyState>
+      </div>
+    );
+  }
+
+  if (!isAdmin && params.view === 'history') {
+    redirect('/');
+  }
+
+  let eventsData: Awaited<ReturnType<typeof getMySubscriptions>> | null = null;
   let historyData: Awaited<ReturnType<typeof getTrackingHistory>> | null = null;
   let eventsError: string | null = null;
   let historyError: string | null = null;
 
   const [eventsResult, historyResult] = await Promise.allSettled([
-    getEvents({
+    getMySubscriptions({
       sort,
       category,
       country,
@@ -54,11 +94,13 @@ export default async function FollowingPage({
       limit: view === 'active' ? LIST_PAGE_SIZE : 1,
       offset: 0,
     }),
-    getTrackingHistory({
-      action: actionFilter,
-      limit: view === 'history' ? HISTORY_PAGE_SIZE : 1,
-      offset: 0,
-    }),
+    isAdmin
+      ? getTrackingHistory({
+          action: actionFilter,
+          limit: view === 'history' ? HISTORY_PAGE_SIZE : 1,
+          offset: 0,
+        })
+      : Promise.resolve(null),
   ]);
 
   if (eventsResult.status === 'fulfilled') {
@@ -70,9 +112,9 @@ export default async function FollowingPage({
         : '加载失败';
   }
 
-  if (historyResult.status === 'fulfilled') {
+  if (historyResult.status === 'fulfilled' && historyResult.value) {
     historyData = historyResult.value;
-  } else {
+  } else if (historyResult.status === 'rejected') {
     historyError =
       historyResult.reason instanceof Error
         ? historyResult.reason.message
@@ -80,28 +122,55 @@ export default async function FollowingPage({
   }
 
   const error = view === 'history' ? historyError : eventsError;
-
   const hasFilters = Boolean(category || country || language);
   const listPath = buildFollowingListPath({ category, country, language, sort });
 
   return (
     <div className="min-w-0 space-y-4">
-      <PageHeader
-        title="我的关注"
-        description="管理正在追踪的热点事件，查看关注与取消关注的操作记录"
-        bordered={false}
-        className="mb-0"
-      />
+      <section className="relative overflow-hidden rounded-[1.75rem] border border-blue-100/80 bg-gradient-to-br from-white via-blue-50 to-orange-50 px-5 py-6 shadow-sm sm:px-7">
+        <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-orange-200/40 blur-2xl" />
+        <div className="absolute -bottom-16 left-12 h-40 w-40 rounded-full bg-blue-200/50 blur-3xl" />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-3 inline-flex items-center rounded-full border border-blue-100 bg-white/80 px-3 py-1 text-xs font-semibold tracking-wide text-brand-700 shadow-sm">
+              你的私人雷达
+            </p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+              我的关注
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+              这里只显示你关注的事件，和全站系统追踪无关。
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/70 bg-white/75 p-2 shadow-sm backdrop-blur">
+            <div className="rounded-xl bg-brand-50 px-4 py-3 text-center">
+              <p className="text-2xl font-black tabular-nums text-brand-700">
+                {eventsData?.total ?? '-'}
+              </p>
+              <p className="mt-0.5 text-xs font-medium text-brand-700/70">关注中</p>
+            </div>
+            {isAdmin && (
+              <div className="rounded-xl bg-orange-50 px-4 py-3 text-center">
+                <p className="text-2xl font-black tabular-nums text-orange-600">
+                  {historyData?.total ?? '-'}
+                </p>
+                <p className="mt-0.5 text-xs font-medium text-orange-700/70">系统操作</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <FollowingTabs
         activeView={view}
         activeCount={eventsData?.total}
         historyCount={historyData?.total}
+        showHistory={isAdmin}
       />
 
       {error && (
         <Alert variant="warning">
-          无法连接 API：{error}。请确认 API 服务已启动且已运行数据采集。
+          无法连接 API：{error}。请确认 API 服务已启动。
         </Alert>
       )}
 
@@ -118,33 +187,34 @@ export default async function FollowingPage({
               activeLanguage={language}
               activeSort={sort}
               sortOptions={[...SORT_OPTIONS]}
+              defaultSort="subscribed"
               total={eventsData.total}
             />
           }
         >
           {eventsData.events.length === 0 && (
             <EmptyState
-              title={hasFilters ? '没有匹配的事件' : '暂无关注中的事件'}
+              title={hasFilters ? '没有匹配的事件' : '还没有关注任何事件'}
               description={
                 hasFilters
-                  ? '尝试调整筛选条件，或清除筛选查看全部事件'
-                  : '运行采集任务后，符合条件的事件将自动出现在这里'
+                  ? '换个筛选条件试试'
+                  : '去候选池或热点页挑几个感兴趣的新闻吧'
               }
             >
               {!hasFilters && (
                 <p className="text-sm text-slate-500">
-                  运行{' '}
-                  <code className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs">
-                    pnpm worker:run
-                  </code>{' '}
-                  开始采集，或到{' '}
+                  到{' '}
                   <Link
                     href="/candidates"
                     className="font-medium text-brand-600 hover:underline"
                   >
                     候选池
                   </Link>{' '}
-                  手动加入关注
+                  或{' '}
+                  <Link href="/hot" className="font-medium text-brand-600 hover:underline">
+                    热点
+                  </Link>{' '}
+                  开始关注
                 </p>
               )}
             </EmptyState>
@@ -162,7 +232,7 @@ export default async function FollowingPage({
         </FilterListLayout>
       )}
 
-      {view === 'history' && historyData && (
+      {view === 'history' && historyData && isAdmin && (
         <div className="space-y-4">
           <TrackingHistoryFilters
             activeAction={actionFilter}
@@ -171,8 +241,8 @@ export default async function FollowingPage({
 
           {historyData.entries.length === 0 ? (
             <EmptyState
-              title="暂无操作记录"
-              description="在候选池加入关注或取消关注事件后，操作记录将显示在这里"
+              title="暂无系统操作记录"
+              description="管理员在候选池纳入系统追踪或停止追踪后，记录将显示在这里"
             />
           ) : (
             <TrackingHistoryTable entries={historyData.entries} />

@@ -23,7 +23,7 @@ function ToggleRow({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-lg border border-slate-200/80 bg-slate-50/50 px-3 py-2.5">
+    <label className="flex items-start gap-3 rounded-xl border border-blue-100/80 bg-gradient-to-r from-blue-50/30 to-white px-3 py-2.5 transition-colors hover:border-blue-200">
       <input
         type="checkbox"
         checked={checked}
@@ -180,7 +180,7 @@ export function DataSourcesSettingsManager({
       )}
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-900">GDELT 新闻 API</h2>
             <Badge variant="green">主数据源</Badge>
@@ -293,7 +293,7 @@ export function DataSourcesSettingsManager({
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
           <h2 className="text-sm font-semibold text-slate-900">多平台热榜（NewsNow）</h2>
           <p className="mt-1 text-xs text-slate-500">
             通过 NewsNow API 拉取各平台热搜，平台 ID 需与 NewsNow 支持的 id 一致
@@ -432,7 +432,7 @@ export function DataSourcesSettingsManager({
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-900">Valyu 新闻搜索</h2>
             <Badge variant={valyuApiKeyConfigured ? 'green' : 'slate'}>
@@ -539,7 +539,7 @@ export function DataSourcesSettingsManager({
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
           <h2 className="text-sm font-semibold text-slate-900">USGS 地震 Feed</h2>
           <p className="mt-1 text-xs text-slate-500">美国地质调查局 GeoJSON 地震数据，免费无需 Key</p>
         </div>

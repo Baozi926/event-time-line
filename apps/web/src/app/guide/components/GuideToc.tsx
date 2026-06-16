@@ -5,6 +5,7 @@ const SECTIONS = [
   { href: '#lifecycle', label: '事件生命周期' },
   { href: '#heat', label: '热度计算' },
   { href: '#promote', label: '候选晋升' },
+  { href: '#roles', label: '权限分层' },
   { href: '#collection', label: '数据采集' },
   { href: '#sources', label: '来源分级' },
 ] as const;

@@ -6,6 +6,7 @@ import {
   readDataSourcesSettings,
   writeDataSourcesSettings,
 } from '../services/data-sources-settings.js';
+import { requireAdmin } from '../auth/middleware.js';
 
 export async function dataSourcesSettingsRoutes(app: FastifyInstance) {
   app.get('/api/v1/settings/data-sources', {
@@ -17,6 +18,8 @@ export async function dataSourcesSettingsRoutes(app: FastifyInstance) {
   app.put('/api/v1/settings/data-sources', {
     schema: { tags: ['settings'] },
   }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
     const parsed = parseDataSourcesSettings(req.body);
     if (!parsed) {
       return reply.status(400).send({ error: '无效的数据源配置' });

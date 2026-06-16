@@ -27,6 +27,20 @@ const COLLECTION_METHODS = [
     desc: '拉取主流媒体 RSS，与 GDELT 结果合并入库，提升特定媒体的覆盖与时效。',
   },
   {
+    id: 'usgs',
+    name: 'USGS 地震',
+    status: 'active' as const,
+    role: '自然灾害',
+    desc: '拉取 USGS 公开地震 GeoJSON Feed，转换为可聚类的事件文章。',
+  },
+  {
+    id: 'valyu',
+    name: 'Valyu 新闻搜索',
+    status: 'active' as const,
+    role: '区域补充',
+    desc: '配置 API Key 后启用，用于补充区域热点与冲突相关报道。',
+  },
+  {
     id: 'hot-trend',
     name: '多平台热榜（NewsNow）',
     status: 'active' as const,
@@ -60,7 +74,7 @@ const PIPELINE_STEPS = [
   {
     step: '1',
     title: '拉取原始文章',
-    desc: '从 GDELT DOC 或 RSS 获取标题、链接、发布时间、媒体域名等字段。',
+    desc: '从 GDELT DOC、RSS、USGS、Valyu 或热榜获取标题、链接、发布时间、媒体域名等字段。',
   },
   {
     step: '2',
@@ -82,8 +96,18 @@ const PIPELINE_STEPS = [
 const MANUAL_JOBS = [
   {
     job: 'fetch',
-    label: '全量采集（GDELT + RSS + 热榜）',
-    desc: '执行分类 GDELT 轮询 + RSS + 热榜拉取，并完成入库与聚类。',
+    label: '全量采集（GDELT + USGS + 可选 Valyu）',
+    desc: '执行 GDELT 主题/区域查询、USGS 地震和可选 Valyu 拉取，并完成入库与聚类。',
+  },
+  {
+    job: 'fetch-hot-trend',
+    label: '多平台热榜',
+    desc: '执行 NewsNow 热榜采集；是否启用、平台列表和 API 地址在数据源设置中配置。',
+  },
+  {
+    job: 'fetch-rss',
+    label: 'RSS 订阅',
+    desc: '强制拉取全部已启用 RSS 源，并完成入库、聚类与候选评分。',
   },
   {
     job: 'tracked',
@@ -98,7 +122,7 @@ const MANUAL_JOBS = [
   {
     job: 'all',
     label: '全部任务',
-    desc: '依次执行全量采集、关注采集、快照。',
+    desc: '依次执行全量采集、热榜、RSS、关注采集和每日快照。',
   },
 ];
 
@@ -161,8 +185,8 @@ export default function GuideSourcesPage() {
       <div className="space-y-10">
         <Section id="overview" title="手段总览">
           <p className="mb-4 text-sm leading-relaxed text-slate-600">
-            Event Timeline 以<strong className="font-medium text-slate-800">开放数据源</strong>为主，
-            通过 Worker 定时或手动触发采集任务。核心组合为 GDELT（8 大分类 + 7 条区域热点）+ RSS + NewsNow 热榜 + USGS 地震；
+            拾光纪以<strong className="font-medium text-slate-800">开放数据源</strong>为主，
+            通过 Worker 定时或手动触发采集任务。核心组合为 GDELT 主题/区域查询 + RSS + USGS 地震 + NewsNow 热榜；
             Valyu 为可选补充，默认不启用。热榜采集参考{' '}
             <a
               href="https://github.com/sansan0/TrendRadar"
@@ -435,9 +459,9 @@ export default function GuideSourcesPage() {
 
         <Section id="schedule" title="调度与手动触发">
           <p className="mb-4 text-sm leading-relaxed text-slate-600">
-            Worker 通过 BullMQ 定时队列执行三类任务，频率可在{' '}
-            <Link href="/collection" className="text-brand-600 hover:underline">
-              采集记录
+            Worker 通过 BullMQ 定时队列执行采集任务，频率可在{' '}
+            <Link href="/settings" className="text-brand-600 hover:underline">
+              系统设置
             </Link>{' '}
             页配置；修改后约 30 秒内生效。
           </p>
@@ -448,7 +472,7 @@ export default function GuideSourcesPage() {
               <p className="mt-2 text-lg font-semibold text-slate-900">
                 {formatMinutesLabel(schedule.fetchIntervalMinutes)}
               </p>
-              <p className="mt-1 text-sm text-slate-600">GDELT 分类 + RSS + 热榜 + 入库聚类</p>
+              <p className="mt-1 text-sm text-slate-600">GDELT + USGS + 可选 Valyu；热榜独立调度</p>
             </Card>
             <Card>
               <Badge variant="brand">关注采集</Badge>
@@ -486,7 +510,7 @@ export default function GuideSourcesPage() {
 
         <Section id="pipeline" title="入库与聚类流程">
           <p className="mb-4 text-sm leading-relaxed text-slate-600">
-            无论来自 GDELT 还是 RSS，文章都经过同一套 pipeline 处理后再进入事件体系：
+            无论来自哪个采集源，文章都经过同一套入库与聚类流程后再进入事件体系：
           </p>
           <div className="space-y-3">
             {PIPELINE_STEPS.map((item) => (

@@ -15,27 +15,55 @@ import type {
   UpdateRssFeedInput,
   TrackingHistoryResponse,
   HotTrendsResponse,
+  SubscriptionListResponse,
   DataSourcesSettings,
   DataSourcesSettingsResponse,
 } from '@event-time-line/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
-async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> {
+async function getServerCookieHeader(): Promise<string | undefined> {
+  if (typeof window !== 'undefined') return undefined;
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const header = cookieStore.toString();
+  return header || undefined;
+}
+
+async function fetchClient<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const cookieHeader = await getServerCookieHeader();
+  if (cookieHeader && !headers.has('cookie')) {
+    headers.set('cookie', cookieHeader);
+  }
+
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    next: { revalidate: 60 },
+    credentials: 'include',
+    cache: 'no-store',
+    headers,
   });
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${path}`);
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `API error: ${res.status} ${path}`);
   }
   return res.json() as Promise<T>;
 }
 
-export const LIST_PAGE_SIZE = 20;
-
-async function fetchClient<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: 'no-store' });
+async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const cookieHeader = await getServerCookieHeader();
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+    },
+    next: { revalidate: 60 },
+  });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${path}`);
   }
@@ -61,6 +89,7 @@ function buildEventsQuery(params?: {
 }
 
 function buildCandidatesQuery(params?: {
+  sort?: string;
   category?: string;
   country?: string;
   language?: string;
@@ -68,12 +97,71 @@ function buildCandidatesQuery(params?: {
   offset?: number;
 }) {
   const q = new URLSearchParams();
+  if (params?.sort) q.set('sort', params.sort);
   if (params?.category) q.set('category', params.category);
   if (params?.country) q.set('country', params.country);
   if (params?.language) q.set('language', params.language);
   if (params?.limit) q.set('limit', String(params.limit));
   if (params?.offset) q.set('offset', String(params.offset));
   return q.toString();
+}
+
+export const LIST_PAGE_SIZE = 20;
+
+function buildSubscriptionsQuery(params?: {
+  sort?: string;
+  category?: string;
+  country?: string;
+  language?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.category) q.set('category', params.category);
+  if (params?.country) q.set('country', params.country);
+  if (params?.language) q.set('language', params.language);
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  return q.toString();
+}
+
+export function getMySubscriptions(params?: {
+  sort?: string;
+  category?: string;
+  country?: string;
+  language?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<SubscriptionListResponse> {
+  const qs = buildSubscriptionsQuery(params);
+  return fetchClient(`/api/v1/me/subscriptions${qs ? `?${qs}` : ''}`);
+}
+
+export function fetchMySubscriptionsClient(params?: {
+  sort?: string;
+  category?: string;
+  country?: string;
+  language?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<SubscriptionListResponse> {
+  const qs = buildSubscriptionsQuery(params);
+  return fetchClient(`/api/v1/me/subscriptions${qs ? `?${qs}` : ''}`);
+}
+
+export async function subscribeToEvent(eventId: string): Promise<void> {
+  await fetchClient(`/api/v1/me/subscriptions/${eventId}`, { method: 'POST' });
+}
+
+export async function subscribeFromCandidate(candidateId: string): Promise<void> {
+  await fetchClient(`/api/v1/me/subscriptions/from-candidate/${candidateId}`, {
+    method: 'POST',
+  });
+}
+
+export async function unsubscribeFromEvent(eventId: string): Promise<void> {
+  await fetchClient(`/api/v1/me/subscriptions/${eventId}`, { method: 'DELETE' });
 }
 
 export function getEvents(params?: {
@@ -117,6 +205,7 @@ export function getEventSnapshots(
 }
 
 export function getCandidates(params?: {
+  sort?: string;
   category?: string;
   country?: string;
   language?: string;
@@ -128,6 +217,7 @@ export function getCandidates(params?: {
 }
 
 export function fetchCandidatesClient(params?: {
+  sort?: string;
   category?: string;
   country?: string;
   language?: string;
@@ -138,40 +228,28 @@ export function fetchCandidatesClient(params?: {
   return fetchClient(`/api/v1/candidates${qs ? `?${qs}` : ''}`);
 }
 
-export function getCandidate(id: string): Promise<CandidateDetailResponse> {
-  return fetch(`${API_URL}/api/v1/candidates/${id}`, {
-    cache: 'no-store',
-  }).then(async (res) => {
-    if (res.status === 404) {
+export async function getCandidate(id: string): Promise<CandidateDetailResponse> {
+  try {
+    return await fetchClient<CandidateDetailResponse>(`/api/v1/candidates/${id}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '';
+    if (msg.includes('404') || msg === 'Candidate not found') {
       throw new Error('候选不存在或已处理');
     }
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
-  });
+    throw e;
+  }
 }
 
 export async function trackCandidate(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/v1/candidates/${id}/track`, {
-    method: 'POST',
-  });
-  if (!res.ok) throw new Error('Failed to track candidate');
+  await fetchClient(`/api/v1/candidates/${id}/track`, { method: 'POST' });
 }
 
 export async function archiveCandidate(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/v1/candidates/${id}/archive`, {
-    method: 'POST',
-  });
-  if (!res.ok) throw new Error('Failed to archive candidate');
+  await fetchClient(`/api/v1/candidates/${id}/archive`, { method: 'POST' });
 }
 
 export async function untrackEvent(slug: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/v1/events/${slug}/untrack`, {
-    method: 'POST',
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? '取消关注失败');
-  }
+  await fetchClient(`/api/v1/events/${slug}/untrack`, { method: 'POST' });
 }
 
 export function getCollectionRun(id: string): Promise<{ run: CollectionRun }> {
@@ -371,19 +449,32 @@ export async function trackHotTrend(input: {
   url: string;
   rank?: number;
 }): Promise<{ success: boolean; eventId: string }> {
-  const res = await fetch(`${API_URL}/api/v1/hot-trends/track`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    error?: string;
-    success?: boolean;
-    eventId?: string;
-  };
-  if (!res.ok || !data.eventId) {
-    throw new Error(data.error ?? '加入关注失败');
-  }
+  const data = await fetchClient<{ success?: boolean; eventId?: string }>(
+    '/api/v1/hot-trends/track',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+  );
+  if (!data.eventId) throw new Error('纳入系统追踪失败');
+  return { success: Boolean(data.success), eventId: data.eventId };
+}
+
+export async function subscribeHotTrend(input: {
+  platformId: string;
+  platformName?: string;
+  title: string;
+  url: string;
+  rank?: number;
+}): Promise<{ success: boolean; eventId: string }> {
+  const data = await fetchClient<{ success?: boolean; eventId?: string }>(
+    '/api/v1/hot-trends/subscribe',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+  );
+  if (!data.eventId) throw new Error('关注失败');
   return { success: Boolean(data.success), eventId: data.eventId };
 }
 

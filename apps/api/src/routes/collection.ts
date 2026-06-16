@@ -34,6 +34,7 @@ import { mapCollectionRun } from '../mappers.js';
 
 import { buildGdeltDailySummary } from '../utils/gdelt-daily.js';
 import { buildRssDailySummary, mapRssArticleCountRows } from '../utils/rss-daily.js';
+import { requireAdmin } from '../auth/middleware.js';
 
 
 
@@ -451,6 +452,8 @@ export async function collectionRoutes(app: FastifyInstance) {
 
   }, async (req, reply) => {
 
+    if (!requireAdmin(req, reply)) return;
+
     const { job = 'fetch' } = (req.body ?? {}) as { job?: CollectionJob };
 
 
@@ -532,6 +535,8 @@ export async function collectionRoutes(app: FastifyInstance) {
     schema: { tags: ['collection'] },
 
   }, async (req, reply) => {
+
+    if (!requireAdmin(req, reply)) return;
 
     const parsed = parseCollectionSchedule(req.body);
 

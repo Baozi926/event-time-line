@@ -16,14 +16,7 @@ import {
   formatCandidateDate,
   formatCandidateTime,
 } from './candidateLabels';
-
-function heatLevel(score: number): { label: string; barClass: string } {
-  if (score >= 70)
-    return { label: '高', barClass: 'from-orange-400 to-orange-600' };
-  if (score >= 40)
-    return { label: '中', barClass: 'from-amber-400 to-amber-600' };
-  return { label: '低', barClass: 'from-slate-300 to-slate-400' };
-}
+import { clampHeatScore, heatVisual } from '@/lib/heatVisual';
 
 function StatCell({ label, value }: { label: string; value: string | number }) {
   return (
@@ -36,6 +29,22 @@ function StatCell({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function CandidateTrackingExplainer() {
+  return (
+    <div className="rounded-2xl border border-dashed border-blue-100 bg-white/70 p-3 text-xs leading-relaxed text-slate-500 shadow-sm shadow-blue-50/60">
+      <p className="font-semibold text-slate-700">小提示：相关新闻怎么来的？</p>
+      <div className="mt-1.5 space-y-1">
+        <p>
+          系统在全量采集中，会按标题相似度和关键词，把看起来属于同一事件的报道自动归并到这里。
+        </p>
+        <p>
+          你点「关注」后，它会进入持续追踪，并按检索词定向补充近期报道；同时也会出现在你的关注列表里。
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function CandidateDetail({
   candidate,
   returnTo = '/candidates',
@@ -43,7 +52,7 @@ export function CandidateDetail({
   candidate: HotspotCandidate;
   returnTo?: string;
 }) {
-  const heat = heatLevel(candidate.heatScore);
+  const heat = heatVisual(candidate.heatScore);
   const hasSummary =
     candidate.summary && candidate.summary !== candidate.title;
   const regionCount = candidate.countryCodes?.length ?? 0;
@@ -53,7 +62,7 @@ export function CandidateDetail({
       <div className="min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start lg:gap-6">
         <div className="min-w-0 space-y-4 pb-20 lg:pb-0">
           <article className="card overflow-hidden">
-            <div className="border-b border-orange-100/80 bg-gradient-to-br from-orange-50/70 via-white to-white px-4 py-4 sm:px-5">
+            <div className="border-b border-blue-100/80 bg-gradient-to-br from-blue-50/70 via-white to-orange-50/40 px-4 py-4 sm:px-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -82,21 +91,25 @@ export function CandidateDetail({
                 </div>
 
                 <div
-                  className="flex shrink-0 items-center gap-3 rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-200/70 sm:min-w-[7.5rem]"
+                  className="flex shrink-0 items-center gap-3 rounded-2xl border border-blue-100 bg-white/90 px-3 py-2.5 shadow-sm sm:min-w-[7.5rem]"
                   aria-label={`热度 ${candidate.heatScore.toFixed(0)}，${heat.label}`}
                 >
-                  <span className="text-2xl font-bold tabular-nums leading-none text-brand-700">
+                  <span
+                    className={`text-2xl font-bold tabular-nums leading-none ${heat.scoreClass}`}
+                  >
                     {candidate.heatScore.toFixed(0)}
                   </span>
                   <div className="min-w-0">
                     <p className="text-[11px] font-medium text-slate-500">
                       热度 · {heat.label}
                     </p>
-                    <div className="mt-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-slate-200/80">
+                    <div
+                      className={`mt-1.5 h-1.5 w-16 overflow-hidden rounded-full ring-1 ${heat.trackClass}`}
+                    >
                       <div
-                        className={`h-full rounded-full bg-gradient-to-r ${heat.barClass}`}
+                        className={`h-full rounded-full ${heat.fillClass}`}
                         style={{
-                          width: `${Math.min(Math.max(candidate.heatScore, 0), 100)}%`,
+                          width: `${clampHeatScore(candidate.heatScore)}%`,
                         }}
                       />
                     </div>
@@ -105,7 +118,7 @@ export function CandidateDetail({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 border-t border-slate-100 sm:grid-cols-4 sm:divide-y-0">
+            <div className="grid grid-cols-2 divide-x divide-y divide-blue-50 border-t border-blue-50 bg-gradient-to-r from-blue-50/20 to-orange-50/10 sm:grid-cols-4 sm:divide-y-0">
               <StatCell label="来源" value={candidate.sourceCount} />
               <StatCell label="文章" value={candidate.articleCount} />
               <StatCell
@@ -124,7 +137,7 @@ export function CandidateDetail({
           </article>
 
           <section className="card overflow-hidden">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-between gap-3 border-b border-blue-50 bg-gradient-to-r from-blue-50/30 to-white px-4 py-3 sm:px-5">
               <h2 className="text-sm font-semibold text-slate-900">
                 相关新闻
                 {candidate.articleCount > 0 && (
@@ -176,15 +189,25 @@ export function CandidateDetail({
           className="hidden lg:sticky lg:block lg:self-start"
           style={{ top: CANDIDATE_DETAIL_STICKY_TOP }}
         >
-          <CandidateActionPanel
-            candidateId={candidate.id}
-            returnTo={returnTo}
-            eventSlug={candidate.slug}
-          />
+          <div className="space-y-3">
+            <CandidateActionPanel
+              candidateId={candidate.id}
+              eventId={candidate.eventId}
+              subscribed={candidate.subscribed}
+              returnTo={returnTo}
+              eventSlug={candidate.slug}
+            />
+            <CandidateTrackingExplainer />
+          </div>
         </aside>
       </div>
 
-      <CandidateActionBar candidateId={candidate.id} returnTo={returnTo} />
+      <CandidateActionBar
+        candidateId={candidate.id}
+        eventId={candidate.eventId}
+        subscribed={candidate.subscribed}
+        returnTo={returnTo}
+      />
     </>
   );
 }

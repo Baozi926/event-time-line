@@ -1,4 +1,4 @@
--- Event Timeline — PostgreSQL Schema
+-- 拾光纪 — PostgreSQL Schema
 -- Requires: PostgreSQL 16+, pgvector extension
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -20,6 +20,7 @@ CREATE TYPE timeline_node_type AS ENUM (
 CREATE TYPE event_relation_type AS ENUM ('background', 'consequence', 'parallel', 'sub_event');
 CREATE TYPE tracking_status AS ENUM ('candidate', 'tracking', 'archived');
 CREATE TYPE tracking_action AS ENUM ('tracked', 'untracked');
+CREATE TYPE user_role AS ENUM ('admin', 'user');
 
 -- ============================================================
 -- Sources
@@ -218,10 +219,24 @@ CREATE TABLE users (
   email         VARCHAR(255) UNIQUE,
   phone         VARCHAR(20) UNIQUE,
   display_name  VARCHAR(100),
+  password_hash VARCHAR(255),
+  role          user_role NOT NULL DEFAULT 'user',
   locale        VARCHAR(10) NOT NULL DEFAULT 'zh-CN',
+  last_login_at TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE sessions (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  VARCHAR(64) NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_sessions_user ON sessions (user_id);
+CREATE INDEX idx_sessions_expires ON sessions (expires_at);
 
 -- ============================================================
 -- Subscriptions

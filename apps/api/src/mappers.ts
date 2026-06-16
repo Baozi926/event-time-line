@@ -34,6 +34,7 @@ export function mapEvent(row: Record<string, unknown>): Event {
     peakAt: row.peak_at ? (row.peak_at as Date).toISOString() : undefined,
     coverImageUrl: row.cover_image_url as string | undefined,
     isFeatured: Boolean(row.is_featured),
+    subscribed: row.subscribed != null ? Boolean(row.subscribed) : undefined,
   };
 }
 
@@ -80,6 +81,7 @@ export function mapCandidate(row: Record<string, unknown>): HotspotCandidate {
     sourceCount: Number(row.source_count),
     eventId: row.event_id as string | undefined,
     slug: row.event_slug as string | undefined,
+    subscribed: Boolean(row.subscribed),
     status: row.status as string,
     firstSeenAt: (row.first_seen_at as Date).toISOString(),
     lastSeenAt: (row.last_seen_at as Date).toISOString(),

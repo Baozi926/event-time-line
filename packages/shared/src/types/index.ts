@@ -1,4 +1,4 @@
-// Event Timeline — Shared Type Definitions
+// 拾光纪 — Shared Type Definitions
 
 export type EventStatus = 'developing' | 'settled' | 'long_term' | 'disputed';
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
@@ -15,6 +15,32 @@ export type EventRelationType = 'background' | 'consequence' | 'parallel' | 'sub
 export type TrackingStatus = 'candidate' | 'tracking' | 'archived';
 export type TrackingAction = 'tracked' | 'untracked';
 export type TrackingSource = 'manual' | 'auto_promote' | 'auto_archive';
+export type UserRole = 'admin' | 'user';
+
+export interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+  role: UserRole;
+  locale: string;
+  createdAt: string;
+}
+
+export interface AuthMeResponse {
+  user: User;
+}
+
+export interface SubscriptionListResponse {
+  events: Event[];
+  total: number;
+  limit: number;
+  offset: number;
+  facets: {
+    categories: CandidateFacet[];
+    countries: CandidateFacet[];
+    languages: CandidateFacet[];
+  };
+}
 
 export interface TrackingHistoryEventSummary {
   slug: string;
@@ -112,6 +138,7 @@ export interface Event {
   peakAt?: string;
   coverImageUrl?: string;
   isFeatured: boolean;
+  subscribed?: boolean;
 }
 
 export interface HotspotCandidate {
@@ -127,6 +154,7 @@ export interface HotspotCandidate {
   sourceCount: number;
   eventId?: string;
   slug?: string;
+  subscribed?: boolean;
   status: string;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -152,6 +180,7 @@ export interface CandidateFacet {
 }
 
 export interface CandidateListParams {
+  sort?: string;
   category?: string;
   country?: string;
   language?: string;

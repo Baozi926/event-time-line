@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { getEvent, getEventArticles, getEventSnapshots } from '@/lib/api';
+import { getMeServer } from '@/lib/auth';
 import { resolveCandidatesReturnTo } from '@/app/candidates/candidateNavigation';
 import { resolveFollowingReturnTo } from '@/lib/followingNavigation';
 import { BackLink } from '@/components/ui/BackLink';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
-import { EventUntrackButton } from '@/components/EventUntrackButton';
+import { AdminUntrackButton } from '@/components/AdminUntrackButton';
+import { SubscribeButton } from '@/components/SubscribeButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +30,8 @@ export default async function EventDetailPage({
 }) {
   const { slug } = await params;
   const { returnTo } = await searchParams;
+  const user = await getMeServer();
+  const isAdmin = user?.role === 'admin';
 
   let event: Awaited<ReturnType<typeof getEvent>> | null = null;
   let articles: Awaited<ReturnType<typeof getEventArticles>> | null = null;
@@ -91,9 +95,12 @@ export default async function EventDetailPage({
           <p className="text-xs text-slate-400">
             信息来源于公开报道，可能随事态发展变化。点击来源链接查看原文。
           </p>
-          {event.trackingStatus === 'tracking' && (
-            <EventUntrackButton slug={event.slug} redirectTo="/" />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <SubscribeButton eventId={event.id} subscribed={event.subscribed} />
+            {isAdmin && event.trackingStatus === 'tracking' && (
+              <AdminUntrackButton slug={event.slug} redirectTo="/" />
+            )}
+          </div>
         </div>
       </article>
 

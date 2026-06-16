@@ -11,9 +11,13 @@ Copy-Item .env.example .env
 pnpm db:migrate
 pnpm db:seed
 
-# 5. 跑一轮数据采集（GDELT + RSS + USGS 地震，需要联网）
-#    默认策略：GDELT 8 大分类 + 7 条区域热点 + 6 个 RSS 源 + USGS
-#    GDELT 全量采集默认每 2 小时，RSS 全局默认每 1 小时（Worker 每 15 分钟检查到期）
-pnpm worker:run fetch        # 仅 GDELT / USGS / 热榜
-pnpm worker:run fetch-rss    # 仅 RSS（强制拉取全部已启用源）
-pnpm worker:run all          # 全部任务
+# 5. 跑一轮数据采集（需要联网）
+#    fetch：GDELT 主题/区域查询 + USGS 地震 + 可选 Valyu
+#    fetch-hot-trend：NewsNow 多平台热榜（是否启用、平台列表在系统设置 → 数据源配置）
+#    fetch-rss：RSS（强制拉取全部已启用源）
+#    默认调度：GDELT/USGS/Valyu 每 2 小时，热榜每 1 小时，RSS 全局默认每 1 小时
+#    Worker 每 15 分钟检查 RSS 到期；追踪补采默认 12 小时，每日快照默认 24 小时
+pnpm worker:run fetch
+pnpm worker:run fetch-hot-trend
+pnpm worker:run fetch-rss
+pnpm worker:run all          # 全部任务：fetch + 热榜 + RSS + 追踪补采 + 快照

@@ -15,10 +15,10 @@ function RankBadge({ rank }: { rank: number }) {
   const top = rank <= 3;
   return (
     <span
-      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold tabular-nums ${
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-black tabular-nums shadow-sm ${
         top
-          ? 'bg-orange-100 text-orange-700'
-          : 'bg-slate-100 text-slate-500'
+          ? 'bg-gradient-to-br from-orange-400 to-orange-500 text-white'
+          : 'bg-blue-50 text-slate-500 ring-1 ring-blue-100'
       }`}
     >
       {rank}
@@ -30,14 +30,14 @@ function PlatformBoard({ board }: { board: HotTrendPlatformBoard }) {
   const updatedLabel = formatUpdatedAt(board.updatedAt);
 
   return (
-    <section className="card flex min-h-[280px] flex-col overflow-hidden">
-      <header className="border-b border-slate-100 px-4 py-3">
+    <section className="card flex min-h-[280px] flex-col">
+      <header className="border-b border-blue-50 bg-gradient-to-r from-blue-50/50 to-orange-50/30 px-4 py-3">
         <div className="flex items-start justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-sm font-bold text-slate-900">
             {board.platformName}
           </h2>
           {updatedLabel && (
-            <span className="text-[11px] tabular-nums text-slate-400">
+            <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] tabular-nums text-slate-500">
               {updatedLabel}
             </span>
           )}
@@ -45,19 +45,19 @@ function PlatformBoard({ board }: { board: HotTrendPlatformBoard }) {
       </header>
 
       {board.error && (
-        <p className="px-4 py-3 text-sm text-amber-700">{board.error}</p>
+        <p className="px-4 py-3 text-sm text-amber-800">{board.error}</p>
       )}
 
       {board.items.length === 0 && !board.error && (
-        <p className="px-4 py-6 text-sm text-slate-400">暂无热榜数据</p>
+        <p className="px-4 py-6 text-sm text-slate-500">这个平台暂时没动静</p>
       )}
 
       {board.items.length > 0 && (
-        <ol className="divide-y divide-slate-100">
+        <ol className="divide-y divide-blue-50">
           {board.items.map((item) => (
             <li
               key={`${board.platformId}-${item.rank}-${item.url}`}
-              className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-slate-50"
+              className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-blue-50/50"
             >
               <RankBadge rank={item.rank} />
               <a
