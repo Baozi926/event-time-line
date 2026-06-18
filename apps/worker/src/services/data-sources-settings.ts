@@ -1,11 +1,23 @@
 import { query } from '@event-time-line/database';
 import {
   DATA_SOURCES_SETTINGS_KEY,
+  DEEPSEEK_API_KEY_SETTINGS_KEY,
   DEFAULT_DATA_SOURCES_SETTINGS,
   mergeDataSourcesSettings,
   parseDataSourcesSettings,
   type DataSourcesSettings,
 } from '@event-time-line/shared';
+
+export async function loadDeepSeekApiKey(): Promise<string | null> {
+  const res = await query<{ value: unknown }>(
+    `SELECT value FROM app_settings WHERE key = $1`,
+    [DEEPSEEK_API_KEY_SETTINGS_KEY],
+  );
+  const value = res.rows[0]?.value;
+  if (!value || typeof value !== 'object') return null;
+  const apiKey = (value as { apiKey?: unknown }).apiKey;
+  return typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : null;
+}
 
 export async function loadDataSourcesSettings(): Promise<{
   settings: DataSourcesSettings;

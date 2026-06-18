@@ -67,6 +67,40 @@ const patches = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)`,
+  `CREATE TABLE IF NOT EXISTS user_topic_subscriptions (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic_slug  VARCHAR(50) NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, topic_slug)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_user_topic_subscriptions_user ON user_topic_subscriptions (user_id)`,
+  `INSERT INTO topics (slug, name, name_en, sort_order)
+   VALUES ('ai', '人工智能', 'AI', 0)
+   ON CONFLICT (slug) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS user_keyword_subscriptions (
+    id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    keyword            VARCHAR(120) NOT NULL,
+    normalized_keyword VARCHAR(120) NOT NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, normalized_keyword)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_user_keyword_subscriptions_user ON user_keyword_subscriptions (user_id)`,
+  `ALTER TABLE event_topics ADD COLUMN IF NOT EXISTS classification_reason TEXT`,
+  `DROP INDEX IF EXISTS idx_events_embedding`,
+  `ALTER TABLE events DROP COLUMN IF EXISTS embedding`,
+  `ALTER TABLE events ADD COLUMN IF NOT EXISTS embedding vector(1024)`,
+  `CREATE INDEX IF NOT EXISTS idx_events_embedding ON events USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50)`,
+  `CREATE TABLE IF NOT EXISTS llm_usage_daily (
+    usage_date    DATE NOT NULL,
+    provider      VARCHAR(50) NOT NULL,
+    operation     VARCHAR(50) NOT NULL,
+    call_count    INT NOT NULL DEFAULT 0,
+    error_count   INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (usage_date, provider, operation)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_llm_usage_daily_date ON llm_usage_daily (usage_date DESC)`,
 ];
 
 async function patch() {
@@ -118,6 +152,28 @@ async function patch() {
     [
       DATA_SOURCES_SETTINGS_KEY,
       JSON.stringify(DEFAULT_DATA_SOURCES_SETTINGS),
+    ],
+  );
+
+  await query(
+    `UPDATE app_settings
+     SET value = value || $1::jsonb, updated_at = NOW()
+     WHERE key = $2
+       AND value->'aiEnhancement' IS NULL`,
+    [
+      JSON.stringify({ aiEnhancement: DEFAULT_DATA_SOURCES_SETTINGS.aiEnhancement }),
+      DATA_SOURCES_SETTINGS_KEY,
+    ],
+  );
+
+  await query(
+    `UPDATE app_settings
+     SET value = value || $1::jsonb, updated_at = NOW()
+     WHERE key = $2
+       AND value->'embedding' IS NULL`,
+    [
+      JSON.stringify({ embedding: DEFAULT_DATA_SOURCES_SETTINGS.embedding }),
+      DATA_SOURCES_SETTINGS_KEY,
     ],
   );
 

@@ -141,6 +141,40 @@ export interface Event {
   subscribed?: boolean;
 }
 
+export interface EventEnriched extends Event {
+  countryCodes?: string[];
+  topicClassifications?: CandidateTopicClassification[];
+  embedding?: CandidateEmbeddingInfo;
+  similarEvents?: CandidateSimilarItem[];
+  detailArticles?: CandidateArticleSummary[];
+}
+
+export interface CandidateTopicClassification {
+  slug: string;
+  name: string;
+  nameEn?: string;
+  confidence: number;
+  reason?: string;
+}
+
+export interface CandidateEmbeddingInfo {
+  enabled: boolean;
+  hasEmbedding: boolean;
+  provider?: 'local' | 'api';
+  model?: string;
+  dimensions?: number;
+}
+
+export interface CandidateSimilarItem {
+  eventId: string;
+  candidateId?: string;
+  slug?: string;
+  title: string;
+  trackingStatus: 'candidate' | 'tracking' | 'archived';
+  similarity: number;
+  heatScore: number;
+}
+
 export interface HotspotCandidate {
   id: string;
   clusterKey: string;
@@ -159,6 +193,9 @@ export interface HotspotCandidate {
   firstSeenAt: string;
   lastSeenAt: string;
   articles?: CandidateArticleSummary[];
+  topics?: CandidateTopicClassification[];
+  embedding?: CandidateEmbeddingInfo;
+  similarEvents?: CandidateSimilarItem[];
 }
 
 export interface CandidateArticleSummary {
@@ -365,6 +402,84 @@ export interface Subscription {
   createdAt: string;
 }
 
+export interface TopicSubscription {
+  slug: string;
+  name: string;
+  nameEn?: string;
+  icon?: string;
+  subscribedAt: string;
+}
+
+export interface TopicSubscriptionListResponse {
+  topics: TopicSubscription[];
+  available: Array<{
+    slug: string;
+    name: string;
+    nameEn?: string;
+    icon?: string;
+    subscribed: boolean;
+  }>;
+}
+
+export interface TopicEventListResponse {
+  events: Event[];
+  total: number;
+  limit: number;
+  offset: number;
+  topicSlug?: string;
+}
+
+export interface KeywordSubscription {
+  id: string;
+  keyword: string;
+  normalizedKeyword: string;
+  createdAt: string;
+  mappedTopicSlug?: string | null;
+}
+
+export interface KeywordSubscriptionListResponse {
+  keywords: KeywordSubscription[];
+}
+
+export type KeywordMatchField = 'title' | 'summary' | 'category' | 'topic';
+
+export interface KeywordMatchDetail {
+  keyword: string;
+  topicSlug?: string;
+  topicName?: string;
+  confidence?: number;
+  reason?: string;
+  similarity?: number;
+  fields?: KeywordMatchField[];
+  topicNames?: string[];
+}
+
+export interface KeywordClassificationMatch {
+  keyword: string;
+  topicSlug?: string;
+  topicName?: string;
+  confidence?: number;
+  reason?: string;
+  similarity?: number;
+}
+
+export interface KeywordEventMatchResponse {
+  matches: KeywordMatchDetail[];
+}
+
+export interface KeywordMatchedEvent extends Event {
+  matchedKeywords: string[];
+  classifications?: KeywordClassificationMatch[];
+}
+
+export interface KeywordEventListResponse {
+  events: KeywordMatchedEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+  keyword?: string;
+}
+
 export interface Notification {
   id: string;
   userId: string;
@@ -513,6 +628,19 @@ export interface DashboardDailyCount {
   count: number;
 }
 
+export interface DashboardLlmDailyUsage {
+  date: string;
+  callCount: number;
+  errorCount: number;
+}
+
+export interface DashboardLlmUsageStats {
+  todayCalls: number;
+  todayErrors: number;
+  last7dCalls: number;
+  daily: DashboardLlmDailyUsage[];
+}
+
 export interface DashboardCategoryActivity {
   category: string;
   articlesFound: number;
@@ -547,4 +675,5 @@ export interface DashboardStats {
   topEvents: DashboardTopEvent[];
   topCandidates: DashboardTopCandidate[];
   articlesDaily: DashboardDailyCount[];
+  llmUsage: DashboardLlmUsageStats;
 }

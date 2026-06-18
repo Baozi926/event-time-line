@@ -311,144 +311,21 @@ export async function hotTrendRoutes(app: FastifyInstance) {
       rank: body.rank,
     });
 
+    const clusterKey = clusterKeyFromTitle(title);
+    await trackEvent(eventId, title);
+    await query(
+      `UPDATE hotspot_candidates
+       SET status = 'promoted', last_seen_at = NOW(), updated_at = NOW()
+       WHERE cluster_key = $1 OR event_id = $2`,
+      [clusterKey, eventId],
+    );
+
     await query(
       `INSERT INTO subscriptions (user_id, event_id)
        VALUES ($1, $2)
        ON CONFLICT (user_id, event_id) DO NOTHING`,
       [req.user.id, eventId],
     );
-
-    return { success: true, eventId };
-  });
-
-  app.post('/api/v1/hot-trends/track', {
-    schema: {
-      tags: ['hot-trends'],
-      body: {
-        type: 'object',
-        required: ['platformId', 'title', 'url'],
-        properties: {
-          platformId: { type: 'string', minLength: 1 },
-          platformName: { type: 'string' },
-          title: { type: 'string', minLength: 1 },
-          url: { type: 'string', minLength: 1 },
-          rank: { type: 'integer', minimum: 1 },
-        },
-      },
-    },
-  }, async (req, reply) => {
-    if (!requireAdmin(req, reply)) return;
-
-    const body = req.body as {
-      platformId: string;
-      platformName?: string;
-      title: string;
-      url: string;
-      rank?: number;
-    };
-
-    const title = body.title.trim().slice(0, 300);
-    if (!title) {
-      return reply.status(400).send({ error: 'Title is required' });
-    }
-
-    const platform = HOT_TREND_PLATFORMS.find((p) => p.id === body.platformId);
-    const platformName = body.platformName?.trim() || platform?.name || body.platformId;
-    const clusterKey = clusterKeyFromTitle(title);
-
-    const candidate = await query<{ event_id: string | null }>(
-      `SELECT event_id FROM hotspot_candidates
-       WHERE cluster_key = $1 AND event_id IS NOT NULL
-       LIMIT 1`,
-      [clusterKey],
-    );
-
-    if (candidate.rows[0]?.event_id) {
-      await trackEvent(candidate.rows[0].event_id, title);
-      await query(
-        `UPDATE hotspot_candidates
-         SET status = 'promoted', last_seen_at = NOW(), updated_at = NOW()
-         WHERE cluster_key = $1`,
-        [clusterKey],
-      );
-      return { success: true, eventId: candidate.rows[0].event_id };
-    }
-
-    const existingEvent = await query<{ id: string }>(
-      `SELECT id
-       FROM events
-       WHERE lower(title) = lower($1)
-          OR similarity(title, $1) > 0.55
-       ORDER BY CASE WHEN lower(title) = lower($1) THEN 1 ELSE similarity(title, $1) END DESC
-       LIMIT 1`,
-      [title],
-    );
-
-    if (existingEvent.rows[0]) {
-      await trackEvent(existingEvent.rows[0].id, title);
-      await query(
-        `INSERT INTO hotspot_candidates (
-           cluster_key, title, event_id, status, heat_score, article_count,
-           source_count, first_seen_at, last_seen_at
-         )
-         VALUES ($1, $2, $3, 'promoted', $4, 0, 1, NOW(), NOW())
-         ON CONFLICT (cluster_key) DO UPDATE SET
-           status = 'promoted',
-           event_id = COALESCE(hotspot_candidates.event_id, EXCLUDED.event_id),
-           last_seen_at = NOW(),
-           updated_at = NOW()`,
-        [
-          clusterKey,
-          title,
-          existingEvent.rows[0].id,
-          Math.max(1, 101 - (body.rank ?? 100)),
-        ],
-      );
-      return { success: true, eventId: existingEvent.rows[0].id };
-    }
-
-    const now = new Date().toISOString();
-    const slug = await uniqueSlug(title);
-    const heatScore = Math.max(1, 101 - (body.rank ?? 100));
-    const created = await query<{ id: string }>(
-      `INSERT INTO events (
-         slug, title, summary, tracking_status, confidence, heat_score,
-         article_count, source_count, first_seen_at, last_updated_at, raw_payload
-       )
-       VALUES ($1, $2, $3, 'tracking', 'medium', $4, 0, 1, $5, $5, $6::jsonb)
-       RETURNING id`,
-      [
-        slug,
-        title,
-        `来自${platformName}的平台热榜，已加入关注并等待后续采集补充。`,
-        heatScore,
-        now,
-        JSON.stringify({
-          sourceType: 'hot_trend',
-          platformId: body.platformId,
-          platformName,
-          url: body.url,
-          rank: body.rank ?? null,
-        }),
-      ],
-    );
-
-    const eventId = created.rows[0].id;
-    await ensureEventQuery(eventId, title);
-    await query(
-      `INSERT INTO hotspot_candidates (
-         cluster_key, title, event_id, status, heat_score, article_count,
-         source_count, first_seen_at, last_seen_at
-       )
-       VALUES ($1, $2, $3, 'promoted', $4, 0, 1, $5, $5)
-       ON CONFLICT (cluster_key) DO UPDATE SET
-         status = 'promoted',
-         event_id = COALESCE(hotspot_candidates.event_id, EXCLUDED.event_id),
-         last_seen_at = NOW(),
-         updated_at = NOW()`,
-      [clusterKey, title, eventId, heatScore, now],
-    );
-    await recordTrackingHistory(eventId, 'tracked', 'manual');
 
     return { success: true, eventId };
   });

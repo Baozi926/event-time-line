@@ -1,10 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '@event-time-line/database';
-import type { CandidateArticleSummary, HotspotCandidate } from '@event-time-line/shared';
-import { mapCandidate, mapCandidateArticle } from '../mappers.js';
+import type { HotspotCandidate } from '@event-time-line/shared';
+import { mapCandidate } from '../mappers.js';
+import { loadEventDetailArticles } from '../services/event-articles.js';
 import { mapFacetRows } from '../event-filter-sql.js';
 import { requireAdmin } from '../auth/middleware.js';
-import { promoteCandidateToTracking } from '../services/candidate-tracking.js';
+import {
+  fallbackTopicFromCategoryHint,
+  ensureEventTopicClassifications,
+  loadEventEmbeddingInfo,
+  loadSimilarEvents,
+} from '../services/candidate-insights.js';
+import { generateEventEmbedding } from '../services/event-embedding.js';
 
 const MAX_ARTICLES_LIST = 5;
 const MAX_ARTICLES_DETAIL = 50;
@@ -35,37 +42,6 @@ const CANDIDATE_BASE_FROM = `
   ) dominant_lang ON true
   WHERE hc.status = 'open' AND e.tracking_status = 'candidate'
 `;
-
-async function loadCandidateArticles(
-  eventIds: string[],
-  maxArticles = MAX_ARTICLES_LIST,
-): Promise<Map<string, CandidateArticleSummary[]>> {
-  if (eventIds.length === 0) return new Map();
-
-  const res = await query(
-    `SELECT * FROM (
-       SELECT ea.event_id,
-              a.id, a.title, a.url, a.snippet, a.language, a.published_at, a.category_hint,
-              s.name AS source_name, s.domain AS source_domain, s.country_code,
-              ROW_NUMBER() OVER (PARTITION BY ea.event_id ORDER BY a.published_at DESC) AS rn
-       FROM event_articles ea
-       JOIN articles a ON a.id = ea.article_id
-       JOIN sources s ON s.id = a.source_id
-       WHERE ea.event_id = ANY($1::uuid[])
-     ) ranked
-     WHERE rn <= $2`,
-    [eventIds, maxArticles],
-  );
-
-  const grouped = new Map<string, CandidateArticleSummary[]>();
-  for (const row of res.rows) {
-    const eventId = row.event_id as string;
-    const list = grouped.get(eventId) ?? [];
-    list.push(mapCandidateArticle(row));
-    grouped.set(eventId, list);
-  }
-  return grouped;
-}
 
 function attachArticles(
   candidates: HotspotCandidate[],
@@ -203,7 +179,7 @@ export async function candidateRoutes(app: FastifyInstance) {
     const eventIds = candidates
       .map((c) => c.eventId)
       .filter((id): id is string => Boolean(id));
-    const articlesByEvent = await loadCandidateArticles(eventIds);
+    const articlesByEvent = await loadEventDetailArticles(eventIds, MAX_ARTICLES_LIST);
 
     return {
       candidates: attachArticles(candidates, articlesByEvent),
@@ -256,31 +232,63 @@ export async function candidateRoutes(app: FastifyInstance) {
 
     const candidate = mapCandidate(rows.rows[0]);
     if (candidate.eventId) {
-      const articlesByEvent = await loadCandidateArticles(
-        [candidate.eventId],
-        MAX_ARTICLES_DETAIL,
-      );
+      const [articlesByEvent, topics, embedding] = await Promise.all([
+        loadEventDetailArticles([candidate.eventId], MAX_ARTICLES_DETAIL),
+        ensureEventTopicClassifications(candidate.eventId),
+        loadEventEmbeddingInfo(candidate.eventId),
+      ]);
       const articles = articlesByEvent.get(candidate.eventId);
       if (articles?.length) {
         candidate.articles = articles;
+      }
+      if (topics.length > 0) {
+        candidate.topics = topics;
+      } else {
+        const fallback = fallbackTopicFromCategoryHint(candidate.categoryHint);
+        if (fallback) candidate.topics = [fallback];
+      }
+      candidate.embedding = embedding;
+      if (embedding.hasEmbedding) {
+        candidate.similarEvents = await loadSimilarEvents(candidate.eventId);
       }
     }
 
     return { candidate };
   });
 
-  app.post('/api/v1/candidates/:id/track', {
+  app.post('/api/v1/candidates/:id/generate-embedding', {
     schema: { tags: ['candidates'] },
   }, async (req, reply) => {
     if (!requireAdmin(req, reply)) return;
 
     const { id } = req.params as { id: string };
-    const eventId = await promoteCandidateToTracking(id);
+
+    const candidate = await query<{ event_id: string }>(
+      `SELECT hc.event_id
+       ${CANDIDATE_BASE_FROM}
+       AND hc.id = $1`,
+      [id],
+    );
+
+    const eventId = candidate.rows[0]?.event_id;
     if (!eventId) {
       return reply.status(404).send({ error: 'Candidate not found' });
     }
 
-    return { success: true, eventId };
+    const result = await generateEventEmbedding(eventId);
+    if (!result.ok) {
+      const status =
+        result.code === 'not_found'
+          ? 404
+          : result.code === 'disabled' || result.code === 'no_api_key'
+            ? 400
+            : 502;
+      return reply.status(status).send({ error: result.message, code: result.code });
+    }
+
+    const embedding = await loadEventEmbeddingInfo(eventId);
+    const similarEvents = await loadSimilarEvents(eventId);
+    return { success: true, embedding, similarEvents };
   });
 
   app.post('/api/v1/candidates/:id/archive', {

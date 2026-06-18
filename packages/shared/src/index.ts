@@ -6,3 +6,7 @@ export * from './threat-queries.js';
 export * from './article-filter.js';
 export * from './hot-trend-platforms.js';
 export * from './trend-radar-rss.js';
+export * from './topics.js';
+export * from './embedding.js';
+export * from './embedding-client.js';
+export * from './topic-embedding-classify.js';

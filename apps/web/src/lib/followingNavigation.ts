@@ -31,6 +31,17 @@ export function resolveFollowingReturnTo(returnTo?: string): string {
   }
 }
 
+export function resolveFollowingBackLabel(returnTo?: string): string {
+  if (!returnTo) return '返回我的关注';
+  try {
+    const url = new URL(returnTo, 'http://local');
+    if (url.searchParams.get('view') === 'keywords') return '返回关键词关注';
+    return '返回我的关注';
+  } catch {
+    return '返回我的关注';
+  }
+}
+
 export function saveFollowingListScroll(listPath: string, eventId: string): void {
   saveListScroll(FOLLOWING_SCROLL_KEY, listPath, eventId);
 }

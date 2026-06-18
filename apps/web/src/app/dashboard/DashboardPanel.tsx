@@ -122,6 +122,30 @@ function DailyChart({ data }: { data: DashboardStats['articlesDaily'] }) {
   );
 }
 
+function LlmDailyChart({ data }: { data: DashboardStats['llmUsage']['daily'] }) {
+  const max = Math.max(...data.map((d) => d.callCount), 1);
+
+  return (
+    <div className="flex h-full min-h-0 items-end gap-1.5">
+      {data.map((d) => (
+        <div key={d.date} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-0.5">
+          <span className="text-[9px] tabular-nums text-violet-500">
+            {d.callCount > 0 ? d.callCount : ''}
+          </span>
+          <div
+            className="w-full rounded-t bg-gradient-to-t from-violet-600 to-violet-400"
+            style={{
+              height: `${Math.max((d.callCount / max) * 100, d.callCount > 0 ? 8 : 2)}%`,
+            }}
+            title={`${d.date}: ${d.callCount} 次${d.errorCount > 0 ? `，失败 ${d.errorCount}` : ''}`}
+          />
+          <span className="text-[9px] text-slate-400">{d.date.slice(5)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RunRow({ run }: { run: CollectionRun }) {
   const statusColor =
     run.status === 'running'
@@ -231,7 +255,7 @@ export function DashboardPanel({
       </div>
 
       {/* Core metrics */}
-      <div className="grid shrink-0 grid-cols-3 gap-2 md:grid-cols-6">
+      <div className="grid shrink-0 grid-cols-3 gap-2 md:grid-cols-4 lg:grid-cols-7">
         <Metric
           label="文章总数"
           value={fmtNum(stats.data.articles.total)}
@@ -264,10 +288,20 @@ export function DashboardPanel({
           sub={`成功 ${stats.collection.last24h.completed} · 失败 ${stats.collection.last24h.failed}`}
           accent={stats.collection.last24h.failed > 0 ? 'red' : 'blue'}
         />
+        <Metric
+          label="今日大模型调用"
+          value={fmtNum(stats.llmUsage.todayCalls)}
+          sub={
+            stats.llmUsage.todayErrors > 0
+              ? `DeepSeek · 失败 ${stats.llmUsage.todayErrors}`
+              : `DeepSeek · 近 7 日 ${fmtNum(stats.llmUsage.last7dCalls)} 次`
+          }
+          accent="blue"
+        />
       </div>
 
       {/* Middle row */}
-      <div className="grid min-h-0 grid-cols-3 gap-2">
+      <div className="grid min-h-0 grid-cols-2 gap-2 xl:grid-cols-4">
         <Panel title="近 7 日入库趋势">
           {stats.articlesDaily.length > 0 ? (
             <DailyChart data={stats.articlesDaily} />
@@ -295,6 +329,23 @@ export function DashboardPanel({
             </div>
           ) : (
             <p className="text-center text-xs text-slate-400">暂无分类采集</p>
+          )}
+        </Panel>
+
+        <Panel
+          title="近 7 日大模型调用"
+          extra={
+            <span className="shrink-0 text-[10px] text-slate-400">
+              DeepSeek 主题分类
+            </span>
+          }
+        >
+          {stats.llmUsage.daily.length > 0 ? (
+            <LlmDailyChart data={stats.llmUsage.daily} />
+          ) : (
+            <p className="text-center text-xs text-slate-400">
+              暂无调用记录（开启 AI 增强后 Worker 分类时会累计）
+            </p>
           )}
         </Panel>
 
@@ -441,6 +492,19 @@ export function DashboardPanel({
               {fmtTime(stats.collection.activeRun.startedAt)}
             </span>
           )}
+          <span>
+            今日大模型{' '}
+            <strong className="text-violet-600">
+              {stats.llmUsage.todayCalls}
+            </strong>
+            {' 次'}
+            {stats.llmUsage.todayErrors > 0 && (
+              <>
+                {' · 失败 '}
+                <strong className="text-red-600">{stats.llmUsage.todayErrors}</strong>
+              </>
+            )}
+          </span>
         </div>
       </div>
     </div>

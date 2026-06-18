@@ -2,6 +2,8 @@ import { query } from '@event-time-line/database';
 import type { RawArticle } from '@event-time-line/shared';
 import { clusterKeyFromTitle, slugify } from '../utils.js';
 import { calculateHeatScore, updateEventStats } from './scoring.js';
+import { tagEventTopics } from './event-topics.js';
+import { embedEvent } from './event-embeddings.js';
 
 /** USGS-style titles are location-specific; title similarity would merge distinct quakes. */
 function isDistinctEarthquakeTitle(title: string): boolean {
@@ -28,6 +30,8 @@ export async function clusterArticle(
       const eventId = similar.rows[0].id;
       await linkArticleToEvent(eventId, articleId);
       await updateEventStats(eventId);
+      await tagEventTopics(eventId, title, title, categoryHint);
+      await embedEvent(eventId, title);
       return eventId;
     }
   }
@@ -41,6 +45,8 @@ export async function clusterArticle(
   if (candidate.rows[0]?.event_id) {
     await linkArticleToEvent(candidate.rows[0].event_id, articleId);
     await updateEventStats(candidate.rows[0].event_id);
+    await tagEventTopics(candidate.rows[0].event_id, title, title, categoryHint);
+    await embedEvent(candidate.rows[0].event_id, title);
     await query(
       `UPDATE hotspot_candidates SET last_seen_at = NOW(), article_count = article_count + 1, updated_at = NOW()
        WHERE id = $1`,
@@ -92,6 +98,8 @@ export async function clusterArticle(
   await updateEventStats(eventId);
   const heat = await calculateHeatScore(eventId);
   await query('UPDATE events SET heat_score = $1 WHERE id = $2', [heat, eventId]);
+  await tagEventTopics(eventId, title.slice(0, 300), title.slice(0, 200), categoryHint ?? null);
+  await embedEvent(eventId, title.slice(0, 300));
 
   return eventId;
 }

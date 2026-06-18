@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getMySubscriptions, getTrackingHistory, LIST_PAGE_SIZE } from '@/lib/api';
+import {
+  getKeywordSubscriptionEvents,
+  getMyKeywordSubscriptions,
+  getMySubscriptions,
+  getTrackingHistory,
+  LIST_PAGE_SIZE,
+} from '@/lib/api';
 import { getMeServer } from '@/lib/auth';
 import { TrackedEventList } from '@/components/TrackedEventList';
 import { buildFollowingListPath } from '@/lib/followingNavigation';
@@ -8,9 +14,14 @@ import { FilterListLayout } from '@/components/filters/FilterListLayout';
 import { ListFilterPanel } from '@/components/filters/ListFilterPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
-import { FollowingTabs } from '@/components/following/FollowingTabs';
+import {
+  FollowingTabs,
+  type FollowingView,
+} from '@/components/following/FollowingTabs';
 import { TrackingHistoryTable } from '@/components/following/TrackingHistoryTable';
 import { TrackingHistoryFilters } from '@/components/following/TrackingHistoryFilters';
+import { KeywordSubscriptionPanel } from '@/components/following/KeywordSubscriptionPanel';
+import { KeywordEventList } from '@/components/following/KeywordEventList';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +33,15 @@ const SORT_OPTIONS = [
 ] as const;
 
 const HISTORY_PAGE_SIZE = 50;
+
+function resolveFollowingView(
+  viewParam: string | undefined,
+  isAdmin: boolean,
+): FollowingView {
+  if (isAdmin && viewParam === 'history') return 'history';
+  if (viewParam === 'keywords') return 'keywords';
+  return 'events';
+}
 
 export default async function FollowingPage({
   searchParams,
@@ -38,8 +58,7 @@ export default async function FollowingPage({
   const user = await getMeServer();
   const params = await searchParams;
   const isAdmin = user?.role === 'admin';
-  const view =
-    isAdmin && params.view === 'history' ? 'history' : 'active';
+  const view = resolveFollowingView(params.view, isAdmin);
   const { category, country, language, sort: sortParam, action } = params;
   const sort = sortParam ?? 'subscribed';
   const actionFilter =
@@ -81,27 +100,35 @@ export default async function FollowingPage({
   }
 
   let eventsData: Awaited<ReturnType<typeof getMySubscriptions>> | null = null;
+  let keywordData: Awaited<ReturnType<typeof getMyKeywordSubscriptions>> | null = null;
+  let keywordEventsData: Awaited<ReturnType<typeof getKeywordSubscriptionEvents>> | null = null;
   let historyData: Awaited<ReturnType<typeof getTrackingHistory>> | null = null;
   let eventsError: string | null = null;
+  let keywordError: string | null = null;
   let historyError: string | null = null;
 
-  const [eventsResult, historyResult] = await Promise.allSettled([
-    getMySubscriptions({
-      sort,
-      category,
-      country,
-      language,
-      limit: view === 'active' ? LIST_PAGE_SIZE : 1,
-      offset: 0,
-    }),
-    isAdmin
-      ? getTrackingHistory({
-          action: actionFilter,
-          limit: view === 'history' ? HISTORY_PAGE_SIZE : 1,
-          offset: 0,
-        })
-      : Promise.resolve(null),
-  ]);
+  const [eventsResult, keywordSubsResult, keywordEventsResult, historyResult] =
+    await Promise.allSettled([
+      getMySubscriptions({
+        sort,
+        category,
+        country,
+        language,
+        limit: view === 'events' ? LIST_PAGE_SIZE : 1,
+        offset: 0,
+      }),
+      getMyKeywordSubscriptions(),
+      view === 'keywords'
+        ? getKeywordSubscriptionEvents({ sort: 'heat', limit: LIST_PAGE_SIZE, offset: 0 })
+        : Promise.resolve(null),
+      isAdmin
+        ? getTrackingHistory({
+            action: actionFilter,
+            limit: view === 'history' ? HISTORY_PAGE_SIZE : 1,
+            offset: 0,
+          })
+        : Promise.resolve(null),
+    ]);
 
   if (eventsResult.status === 'fulfilled') {
     eventsData = eventsResult.value;
@@ -109,6 +136,24 @@ export default async function FollowingPage({
     eventsError =
       eventsResult.reason instanceof Error
         ? eventsResult.reason.message
+        : '加载失败';
+  }
+
+  if (keywordSubsResult.status === 'fulfilled') {
+    keywordData = keywordSubsResult.value;
+  } else {
+    keywordError =
+      keywordSubsResult.reason instanceof Error
+        ? keywordSubsResult.reason.message
+        : '加载失败';
+  }
+
+  if (keywordEventsResult.status === 'fulfilled' && keywordEventsResult.value) {
+    keywordEventsData = keywordEventsResult.value;
+  } else if (keywordEventsResult.status === 'rejected' && view === 'keywords') {
+    keywordError =
+      keywordEventsResult.reason instanceof Error
+        ? keywordEventsResult.reason.message
         : '加载失败';
   }
 
@@ -121,9 +166,16 @@ export default async function FollowingPage({
         : '加载失败';
   }
 
-  const error = view === 'history' ? historyError : eventsError;
+  const error =
+    view === 'history'
+      ? historyError
+      : view === 'keywords'
+        ? keywordError
+        : eventsError;
   const hasFilters = Boolean(category || country || language);
   const listPath = buildFollowingListPath({ category, country, language, sort });
+  const keywordCount = keywordData?.keywords.length ?? 0;
+  const hasKeywordSubscriptions = keywordCount > 0;
 
   return (
     <div className="min-w-0 space-y-4">
@@ -139,7 +191,7 @@ export default async function FollowingPage({
               我的关注
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-              这里只显示你关注的事件，和全站系统追踪无关。
+              手动关注具体事件，或用关键词订阅主题，相关内容会分开展示在这里。
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/70 bg-white/75 p-2 shadow-sm backdrop-blur">
@@ -147,23 +199,22 @@ export default async function FollowingPage({
               <p className="text-2xl font-black tabular-nums text-brand-700">
                 {eventsData?.total ?? '-'}
               </p>
-              <p className="mt-0.5 text-xs font-medium text-brand-700/70">关注中</p>
+              <p className="mt-0.5 text-xs font-medium text-brand-700/70">事件关注</p>
             </div>
-            {isAdmin && (
-              <div className="rounded-xl bg-orange-50 px-4 py-3 text-center">
-                <p className="text-2xl font-black tabular-nums text-orange-600">
-                  {historyData?.total ?? '-'}
-                </p>
-                <p className="mt-0.5 text-xs font-medium text-orange-700/70">系统操作</p>
-              </div>
-            )}
+            <div className="rounded-xl bg-orange-50 px-4 py-3 text-center">
+              <p className="text-2xl font-black tabular-nums text-orange-600">
+                {keywordData ? keywordCount : '-'}
+              </p>
+              <p className="mt-0.5 text-xs font-medium text-orange-700/70">关键词</p>
+            </div>
           </div>
         </div>
       </section>
 
       <FollowingTabs
         activeView={view}
-        activeCount={eventsData?.total}
+        eventCount={eventsData?.total}
+        keywordCount={keywordCount}
         historyCount={historyData?.total}
         showHistory={isAdmin}
       />
@@ -174,7 +225,7 @@ export default async function FollowingPage({
         </Alert>
       )}
 
-      {view === 'active' && eventsData && (
+      {view === 'events' && eventsData && (
         <FilterListLayout
           sidebar={
             <ListFilterPanel
@@ -232,6 +283,48 @@ export default async function FollowingPage({
         </FilterListLayout>
       )}
 
+      {view === 'keywords' && keywordData && (
+        <div className="space-y-4">
+          <KeywordSubscriptionPanel data={keywordData} />
+
+          {hasKeywordSubscriptions && keywordEventsData ? (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">关键词推荐</h2>
+              <p className="text-sm text-slate-500">
+                根据你关注的关键词，经主题分类后自动匹配的相关事件
+              </p>
+                </div>
+                <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
+                  {keywordEventsData.total} 条
+                </span>
+              </div>
+
+              {keywordEventsData.events.length === 0 ? (
+                <EmptyState
+                  title="暂无匹配事件"
+                  description="采集到新内容后会自动出现在这里，也可以先去候选池看看"
+                />
+              ) : (
+                <KeywordEventList
+                  events={keywordEventsData.events}
+                  total={keywordEventsData.total}
+                  sort="heat"
+                />
+              )}
+            </section>
+          ) : (
+            !hasKeywordSubscriptions && (
+              <EmptyState
+                title="还没有关注关键词"
+                description="在上方输入你关心的词，系统会自动把相关事件收进推荐列表"
+              />
+            )
+          )}
+        </div>
+      )}
+
       {view === 'history' && historyData && isAdmin && (
         <div className="space-y-4">
           <TrackingHistoryFilters
@@ -242,7 +335,7 @@ export default async function FollowingPage({
           {historyData.entries.length === 0 ? (
             <EmptyState
               title="暂无系统操作记录"
-              description="管理员在候选池纳入系统追踪或停止追踪后，记录将显示在这里"
+              description="用户关注候选或热榜条目、管理员归档事件后，记录将显示在这里"
             />
           ) : (
             <TrackingHistoryTable entries={historyData.entries} />

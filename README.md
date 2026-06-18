@@ -12,6 +12,8 @@
 - 系统设置：配置数据源、RSS 源和采集计划
 - 认证与权限：Cookie Session 登录，区分访客、登录用户和管理员
 
+长期目标见 `docs/system-goals.md`：持续追踪新闻事件时间线，并对事件进行多维主题分类，支持用户按兴趣标签关注新闻。
+
 ## 技术栈
 
 - Monorepo：pnpm workspace + Turborepo

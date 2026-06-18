@@ -8,7 +8,7 @@ import {
   type DataSourcesSettings,
   type HotTrendPlatformConfig,
 } from '@event-time-line/shared';
-import { updateDataSourcesSettings } from '@/lib/api';
+import { updateDataSourcesSettings, updateDeepSeekApiKey, updateEmbeddingApiKey } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
 
 function ToggleRow({
@@ -16,19 +16,26 @@ function ToggleRow({
   description,
   checked,
   onChange,
+  disabled = false,
 }: {
   label: string;
   description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-xl border border-blue-100/80 bg-gradient-to-r from-blue-50/30 to-white px-3 py-2.5 transition-colors hover:border-blue-200">
+    <label
+      className={`flex items-start gap-3 rounded-xl border border-blue-100/80 bg-gradient-to-r from-blue-50/30 to-white px-3 py-2.5 transition-colors hover:border-blue-200 ${
+        disabled ? 'cursor-not-allowed opacity-60' : ''
+      }`}
+    >
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed"
       />
       <span className="min-w-0">
         <span className="text-sm font-medium text-slate-900">{label}</span>
@@ -58,14 +65,33 @@ function FieldLabel({
 export function DataSourcesSettingsManager({
   initial,
   valyuApiKeyConfigured,
+  deepSeekApiKeyConfigured,
+  embeddingApiKeyConfigured,
+  embeddingServiceReachable,
 }: {
   initial: DataSourcesSettings;
   valyuApiKeyConfigured: boolean;
+  deepSeekApiKeyConfigured: boolean;
+  embeddingApiKeyConfigured: boolean;
+  embeddingServiceReachable: boolean;
 }) {
   const [settings, setSettings] = useState<DataSourcesSettings>(initial);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deepSeekConfigured, setDeepSeekConfigured] = useState(
+    deepSeekApiKeyConfigured,
+  );
+  const [deepSeekApiKeyInput, setDeepSeekApiKeyInput] = useState('');
+  const [savingDeepSeekKey, setSavingDeepSeekKey] = useState(false);
+  const [embeddingConfigured, setEmbeddingConfigured] = useState(
+    embeddingApiKeyConfigured,
+  );
+  const [embeddingReachable, setEmbeddingReachable] = useState(
+    embeddingServiceReachable,
+  );
+  const [embeddingApiKeyInput, setEmbeddingApiKeyInput] = useState('');
+  const [savingEmbeddingKey, setSavingEmbeddingKey] = useState(false);
   const [expandedGdeltKey, setExpandedGdeltKey] = useState<string | null>(null);
   const [newPlatform, setNewPlatform] = useState({
     id: '',
@@ -73,18 +99,94 @@ export function DataSourcesSettingsManager({
     expectedDomain: '',
   });
 
-  async function handleSave() {
+  async function persistSettings(
+    next: DataSourcesSettings,
+    successMessage?: string,
+  ): Promise<boolean> {
     setSaving(true);
     setMessage(null);
     setError(null);
     try {
-      const res = await updateDataSourcesSettings(settings);
+      const res = await updateDataSourcesSettings(next);
       setSettings(res.settings);
-      setMessage(res.message);
+      setDeepSeekConfigured(res.deepSeekApiKeyConfigured);
+      setEmbeddingConfigured(res.embeddingApiKeyConfigured);
+      setEmbeddingReachable(res.embeddingServiceReachable);
+      setMessage(successMessage ?? res.message);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
+      return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    await persistSettings(settings);
+  }
+
+  async function handleAiEnhancementToggle(enabled: boolean) {
+    if (enabled && !deepSeekConfigured) {
+      setError('请先配置 DeepSeek API Key');
+      return;
+    }
+    const previous = settings;
+    const next: DataSourcesSettings = {
+      ...settings,
+      aiEnhancement: { ...settings.aiEnhancement, enabled },
+    };
+    setSettings(next);
+    const ok = await persistSettings(
+      next,
+      enabled ? 'DeepSeek 分类增强已开启' : 'DeepSeek 分类增强已关闭',
+    );
+    if (!ok) setSettings(previous);
+  }
+
+  async function handleEmbeddingToggle(enabled: boolean) {
+    const previous = settings;
+    const next: DataSourcesSettings = {
+      ...settings,
+      embedding: { ...settings.embedding, enabled },
+    };
+    setSettings(next);
+    const ok = await persistSettings(
+      next,
+      enabled ? '向量语义搜索已开启' : '向量语义搜索已关闭',
+    );
+    if (!ok) setSettings(previous);
+  }
+
+  async function handleSaveEmbeddingApiKey() {
+    setSavingEmbeddingKey(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await updateEmbeddingApiKey(embeddingApiKeyInput);
+      setEmbeddingConfigured(res.embeddingApiKeyConfigured);
+      setEmbeddingApiKeyInput('');
+      setMessage(res.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存 Embedding API Key 失败');
+    } finally {
+      setSavingEmbeddingKey(false);
+    }
+  }
+
+  async function handleSaveDeepSeekApiKey() {
+    setSavingDeepSeekKey(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await updateDeepSeekApiKey(deepSeekApiKeyInput);
+      setDeepSeekConfigured(res.deepSeekApiKeyConfigured);
+      setDeepSeekApiKeyInput('');
+      setMessage(res.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存 DeepSeek API Key 失败');
+    } finally {
+      setSavingDeepSeekKey(false);
     }
   }
 
@@ -178,6 +280,243 @@ export function DataSourcesSettingsManager({
           {error}
         </p>
       )}
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-900">AI 增强分类（DeepSeek）</h2>
+            <Badge variant={deepSeekConfigured ? 'green' : 'slate'}>
+              {deepSeekConfigured ? 'API Key 已配置' : '未配置 API Key'}
+            </Badge>
+            <Badge variant={settings.aiEnhancement.enabled ? 'orange' : 'slate'}>
+              {settings.aiEnhancement.enabled ? '会产生调用费用' : '默认关闭'}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            API Key 保存在系统设置中，不会回显到页面；只有开关开启且 Key 已配置时，
+            Worker 才会调用 DeepSeek 做新闻主题分类。
+          </p>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          <div>
+            <FieldLabel hint="留空保存会清除已配置的 Key；页面不会回显现有 Key">
+              DeepSeek API Key
+            </FieldLabel>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="password"
+                value={deepSeekApiKeyInput}
+                onChange={(event) => setDeepSeekApiKeyInput(event.target.value)}
+                placeholder={
+                  deepSeekConfigured ? '已配置，如需更换请粘贴新 Key' : '粘贴 DeepSeek API Key'
+                }
+                autoComplete="off"
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleSaveDeepSeekApiKey}
+                disabled={savingDeepSeekKey}
+                className="btn-secondary text-xs"
+              >
+                {savingDeepSeekKey ? '保存中…' : deepSeekApiKeyInput.trim() ? '保存 Key' : '清除 Key'}
+              </button>
+            </div>
+          </div>
+          <ToggleRow
+            label="启用 DeepSeek 事件分类增强"
+            description={
+              deepSeekConfigured
+                ? '用于给事件打多维主题标签和生成推荐原因；关闭后使用关键词与语义向量兜底（勾选后立即保存）'
+                : '需先在上方配置 DeepSeek API Key'
+            }
+            checked={settings.aiEnhancement.enabled}
+            disabled={!deepSeekConfigured || saving}
+            onChange={(enabled) => void handleAiEnhancementToggle(enabled)}
+          />
+          <p className="rounded-2xl bg-orange-50 px-3 py-2 text-xs leading-relaxed text-orange-700">
+            这是付费增强能力。建议调试采集、批量回填或成本敏感时保持关闭；需要提升分类质量时再打开。
+          </p>
+        </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-blue-50 bg-gradient-to-r from-violet-50/40 to-blue-50/20 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-900">向量语义搜索</h2>
+            <Badge variant={settings.embedding.enabled ? 'green' : 'slate'}>
+              {settings.embedding.enabled ? '已启用' : '已关闭'}
+            </Badge>
+            <Badge variant={embeddingReachable ? 'green' : 'slate'}>
+              {settings.embedding.provider === 'local'
+                ? embeddingReachable ? '本地服务可达' : '本地服务未启动'
+                : embeddingConfigured ? 'API Key 已配置' : '未配置 API Key'}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            基于事件标题生成向量，用于关键词关注的语义召回。默认使用本机 bge-m3 模型；
+            也可切换为 OpenAI 兼容的远程 embedding API。
+          </p>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          <ToggleRow
+            label="启用向量语义搜索"
+            description="关闭后关键词推荐回退到主题分类与规则匹配（勾选后立即保存）"
+            checked={settings.embedding.enabled}
+            disabled={saving}
+            onChange={(enabled) => void handleEmbeddingToggle(enabled)}
+          />
+
+          <div>
+            <FieldLabel>Embedding 提供方</FieldLabel>
+            <div className="flex flex-wrap gap-3">
+              {(['local', 'api'] as const).map((provider) => (
+                <label
+                  key={provider}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <input
+                    type="radio"
+                    name="embedding-provider"
+                    checked={settings.embedding.provider === provider}
+                    onChange={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        embedding: { ...prev.embedding, provider },
+                      }))
+                    }
+                  />
+                  {provider === 'local' ? '本地模型（默认）' : '远程 API'}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {settings.embedding.provider === 'local' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <FieldLabel hint="默认 http://localhost:8082">本地服务地址</FieldLabel>
+                <input
+                  value={settings.embedding.local.baseUrl}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      embedding: {
+                        ...prev.embedding,
+                        local: { ...prev.embedding.local, baseUrl: e.target.value },
+                      },
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <FieldLabel>本地模型名称</FieldLabel>
+                <input
+                  value={settings.embedding.local.model}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      embedding: {
+                        ...prev.embedding,
+                        local: { ...prev.embedding.local, model: e.target.value },
+                      },
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <FieldLabel>远程 API Base URL</FieldLabel>
+                  <input
+                    value={settings.embedding.api.baseUrl}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        embedding: {
+                          ...prev.embedding,
+                          api: { ...prev.embedding.api, baseUrl: e.target.value },
+                        },
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>远程模型名称</FieldLabel>
+                  <input
+                    value={settings.embedding.api.model}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        embedding: {
+                          ...prev.embedding,
+                          api: { ...prev.embedding.api, model: e.target.value },
+                        },
+                      }))
+                    }
+                    placeholder="text-embedding-3-small"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <FieldLabel hint="留空保存会清除已配置的 Key">Embedding API Key</FieldLabel>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="password"
+                    value={embeddingApiKeyInput}
+                    onChange={(e) => setEmbeddingApiKeyInput(e.target.value)}
+                    placeholder={
+                      embeddingConfigured ? '已配置，如需更换请粘贴新 Key' : '粘贴 API Key'
+                    }
+                    autoComplete="off"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveEmbeddingApiKey}
+                    disabled={savingEmbeddingKey}
+                    className="btn-secondary text-xs"
+                  >
+                    {savingEmbeddingKey ? '保存中…' : embeddingApiKeyInput.trim() ? '保存 Key' : '清除 Key'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <FieldLabel hint="0.3 - 0.95，越高越严格">语义相似度阈值</FieldLabel>
+            <input
+              type="number"
+              min={0.3}
+              max={0.95}
+              step={0.01}
+              value={settings.embedding.minSimilarity}
+              onChange={(e) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  embedding: {
+                    ...prev.embedding,
+                    minSimilarity: Number(e.target.value),
+                  },
+                }))
+              }
+              className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <p className="rounded-2xl bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-700">
+            本地模式需先启动 <code className="text-[11px]">apps/embedding-service</code>。
+            切换提供方后请执行 <code className="text-[11px]">pnpm worker:run embed-backfill --force</code> 重算历史向量。
+          </p>
+        </div>
+      </section>
 
       <section className="card overflow-hidden">
         <div className="border-b border-blue-50 bg-gradient-to-r from-blue-50/40 to-orange-50/20 px-5 py-4">

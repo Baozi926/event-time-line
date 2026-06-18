@@ -10,6 +10,7 @@ import {
 } from './CandidateActionPanel';
 import { CANDIDATE_DETAIL_STICKY_TOP } from './CandidateStickyBackNav';
 import { CandidateArticleList } from './CandidateArticleList';
+import { CandidateTopicProfile } from './CandidateTopicProfile';
 import {
   categoryLabel,
   countryLabel,
@@ -135,6 +136,15 @@ export function CandidateDetail({
               最近更新 {formatCandidateTime(candidate.lastSeenAt)}
             </div>
           </article>
+
+          <CandidateTopicProfile
+            candidateId={candidate.id}
+            topics={candidate.topics}
+            embedding={candidate.embedding}
+            similarEvents={candidate.similarEvents}
+            categoryHint={candidate.categoryHint}
+            returnTo={returnTo}
+          />
 
           <section className="card overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b border-blue-50 bg-gradient-to-r from-blue-50/30 to-white px-4 py-3 sm:px-5">

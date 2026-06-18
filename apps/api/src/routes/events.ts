@@ -9,6 +9,17 @@ import {
   mapFacetRows,
   parseEventFilterParams,
 } from '../event-filter-sql.js';
+import {
+  ensureEventTopicClassifications,
+  fallbackTopicFromCategoryHint,
+  loadEventEmbeddingInfo,
+  loadSimilarEvents,
+} from '../services/candidate-insights.js';
+import { loadEventDetailArticles } from '../services/event-articles.js';
+import { generateEventEmbedding } from '../services/event-embedding.js';
+
+const ARTICLE_COUNTRY = 'COALESCE(a.country_code, s.country_code)';
+const MAX_DETAIL_ARTICLES = 50;
 
 const TRACKING_BASE_FROM = `
   FROM events e
@@ -141,7 +152,81 @@ export async function eventRoutes(app: FastifyInstance) {
     if (!res.rows[0]) {
       return reply.status(404).send({ error: 'Event not found' });
     }
-    return mapEvent(res.rows[0]);
+
+    const event = mapEvent(res.rows[0]);
+    const eventId = event.id;
+
+    const [countryRes, articlesByEvent, topicRows, embedding] = await Promise.all([
+      query<{ country_codes: string[] | null }>(
+        `SELECT array_agg(DISTINCT cc ORDER BY cc) AS country_codes
+         FROM (
+           SELECT ${ARTICLE_COUNTRY} AS cc
+           FROM event_articles ea
+           JOIN articles a ON a.id = ea.article_id
+           JOIN sources s ON s.id = a.source_id
+           WHERE ea.event_id = $1 AND ${ARTICLE_COUNTRY} IS NOT NULL
+         ) codes`,
+        [eventId],
+      ),
+      loadEventDetailArticles([eventId], MAX_DETAIL_ARTICLES),
+      ensureEventTopicClassifications(eventId),
+      loadEventEmbeddingInfo(eventId),
+    ]);
+
+    let topicClassifications = topicRows;
+    if (topicClassifications.length === 0) {
+      const fallback = fallbackTopicFromCategoryHint(event.categoryHint);
+      if (fallback) topicClassifications = [fallback];
+    }
+
+    let similarEvents: Awaited<ReturnType<typeof loadSimilarEvents>> = [];
+    if (embedding.hasEmbedding) {
+      similarEvents = await loadSimilarEvents(eventId);
+    }
+
+    const countryCodes = countryRes.rows[0]?.country_codes ?? undefined;
+    const detailArticles = articlesByEvent.get(eventId);
+
+    return {
+      ...event,
+      countryCodes: countryCodes?.length ? countryCodes : undefined,
+      topicClassifications,
+      embedding,
+      similarEvents,
+      detailArticles: detailArticles?.length ? detailArticles : undefined,
+    };
+  });
+
+  app.post('/api/v1/events/:slug/generate-embedding', {
+    schema: { tags: ['events'] },
+  }, async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+
+    const { slug } = req.params as { slug: string };
+
+    const event = await query<{ id: string }>(
+      'SELECT id FROM events WHERE slug = $1',
+      [slug],
+    );
+    if (!event.rows[0]) {
+      return reply.status(404).send({ error: 'Event not found' });
+    }
+
+    const eventId = event.rows[0].id;
+    const result = await generateEventEmbedding(eventId);
+    if (!result.ok) {
+      const status =
+        result.code === 'not_found'
+          ? 404
+          : result.code === 'disabled' || result.code === 'no_api_key'
+            ? 400
+            : 502;
+      return reply.status(status).send({ error: result.message, code: result.code });
+    }
+
+    const embedding = await loadEventEmbeddingInfo(eventId);
+    const similarEvents = await loadSimilarEvents(eventId);
+    return { success: true, embedding, similarEvents };
   });
 
   app.get('/api/v1/events/:slug/articles', {

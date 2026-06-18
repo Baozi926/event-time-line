@@ -1,4 +1,4 @@
-# 1. 启动数据库和 Redis
+# 1. 启动数据库、Redis 与 Embedding 服务
 docker compose up -d
 
 # 2. 安装依赖（只需第一次或 package 变更后）
@@ -21,3 +21,11 @@ pnpm worker:run fetch
 pnpm worker:run fetch-hot-trend
 pnpm worker:run fetch-rss
 pnpm worker:run all          # 全部任务：fetch + 热榜 + RSS + 追踪补采 + 快照
+
+# 6. Embedding 服务（已随 docker compose up -d 启动，默认 http://localhost:8082）
+#    若未用 Docker，可本机启动，详见 apps/embedding-service/README.md
+
+# 7. 为历史事件补向量
+pnpm worker:run embed-backfill
+# 切换 embedding 提供方后重算：
+pnpm worker:run embed-backfill --force

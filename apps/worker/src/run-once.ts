@@ -32,6 +32,12 @@ async function main() {
       case 'snapshot':
         await runSnapshotPipeline();
         break;
+      case 'embed-backfill': {
+        const { runEmbedBackfill } = await import('./services/event-embeddings.js');
+        const force = process.argv.includes('--force');
+        await runEmbedBackfill(force);
+        break;
+      }
       case 'all':
         await runFetchPipeline();
         await runHotTrendFetchPipeline();
@@ -40,7 +46,7 @@ async function main() {
         await runSnapshotPipeline();
         break;
       default:
-        console.error(`Unknown command: ${cmd}. Use fetch|fetch-hot-trend|fetch-rss|tracked|snapshot|all`);
+        console.error(`Unknown command: ${cmd}. Use fetch|fetch-hot-trend|fetch-rss|tracked|snapshot|embed-backfill|all`);
         process.exit(1);
     }
   } finally {

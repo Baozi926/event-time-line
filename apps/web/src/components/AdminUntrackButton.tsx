@@ -44,7 +44,7 @@ export function AdminUntrackButton({
         disabled={loading}
         className={className ?? 'btn-secondary text-sm'}
       >
-        {loading ? '处理中…' : '停止系统追踪'}
+        {loading ? '处理中…' : '归档'}
       </button>
       {feedback && (
         <span
@@ -56,10 +56,10 @@ export function AdminUntrackButton({
       )}
       <ConfirmDialog
         open={confirmOpen}
-        title="确定停止系统追踪？"
-        description="停止后将不再持续采集相关报道，并会从全站关注列表移除。"
-        confirmLabel="停止追踪"
-        cancelLabel="继续保留"
+        title="确定归档这个事件？"
+        description="归档后将不再持续采集相关报道。"
+        confirmLabel="确定归档"
+        cancelLabel="先不归档"
         variant="destructive"
         loading={loading}
         onConfirm={confirmUntrack}

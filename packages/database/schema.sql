@@ -71,6 +71,7 @@ CREATE TABLE topics (
 );
 
 INSERT INTO topics (slug, name, name_en, sort_order) VALUES
+  ('ai',          '人工智能', 'AI',          0),
   ('politics',    '政治', 'Politics',    1),
   ('disaster',    '灾害', 'Disaster',    2),
   ('conflict',    '冲突', 'Conflict',    3),
@@ -137,7 +138,7 @@ CREATE TABLE events (
   cover_image_url TEXT,
   is_featured     BOOLEAN NOT NULL DEFAULT FALSE,
   raw_payload     JSONB,
-  embedding       vector(1536),
+  embedding       vector(1024),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -191,9 +192,10 @@ CREATE INDEX idx_timeline_event ON timeline_items (event_id, occurred_at DESC);
 -- ============================================================
 
 CREATE TABLE event_topics (
-  event_id    UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  topic_id    UUID NOT NULL REFERENCES topics(id),
-  confidence  DOUBLE PRECISION DEFAULT 1.0,
+  event_id               UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  topic_id               UUID NOT NULL REFERENCES topics(id),
+  confidence             DOUBLE PRECISION DEFAULT 1.0,
+  classification_reason  TEXT,
   PRIMARY KEY (event_id, topic_id)
 );
 
@@ -252,6 +254,35 @@ CREATE TABLE subscriptions (
 );
 
 CREATE INDEX idx_subscriptions_user ON subscriptions (user_id);
+
+-- ============================================================
+-- User topic subscriptions (interest-based following)
+-- ============================================================
+
+CREATE TABLE user_topic_subscriptions (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  topic_slug  VARCHAR(50) NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, topic_slug)
+);
+
+CREATE INDEX idx_user_topic_subscriptions_user ON user_topic_subscriptions (user_id);
+
+-- ============================================================
+-- User keyword subscriptions (free-form interest following)
+-- ============================================================
+
+CREATE TABLE user_keyword_subscriptions (
+  id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  keyword            VARCHAR(120) NOT NULL,
+  normalized_keyword VARCHAR(120) NOT NULL,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, normalized_keyword)
+);
+
+CREATE INDEX idx_user_keyword_subscriptions_user ON user_keyword_subscriptions (user_id);
 
 -- ============================================================
 -- Notifications
@@ -372,6 +403,21 @@ CREATE TABLE hotspot_candidates (
 
 CREATE UNIQUE INDEX idx_hotspot_candidates_cluster ON hotspot_candidates (cluster_key);
 CREATE INDEX idx_hotspot_candidates_status ON hotspot_candidates (status, heat_score DESC);
+
+-- ============================================================
+-- LLM API usage (daily counters)
+-- ============================================================
+
+CREATE TABLE llm_usage_daily (
+  usage_date    DATE NOT NULL,
+  provider      VARCHAR(50) NOT NULL,
+  operation     VARCHAR(50) NOT NULL,
+  call_count    INT NOT NULL DEFAULT 0,
+  error_count   INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (usage_date, provider, operation)
+);
+
+CREATE INDEX idx_llm_usage_daily_date ON llm_usage_daily (usage_date DESC);
 
 -- Incremental patches for existing databases
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS category_hint VARCHAR(50);

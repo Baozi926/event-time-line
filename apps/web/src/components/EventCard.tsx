@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Event } from '@event-time-line/shared';
 import { categoryLabel } from '@/lib/filterLabels';
 import { Badge } from '@/components/ui/Badge';
@@ -16,22 +17,40 @@ export function EventCard({
   event,
   listPath = '/',
   onUntrack,
+  cornerBadge,
 }: {
   event: Event;
   listPath?: string;
   onUntrack?: (eventId: string) => void;
+  cornerBadge?: ReactNode;
 }) {
+  const hasTopRightAdornment = Boolean(cornerBadge || onUntrack);
+
   return (
     <div className="group relative scroll-mt-24 overflow-hidden rounded-[1.35rem] border border-blue-100/80 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/70">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 via-blue-400 to-orange-400" />
       <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-blue-100/70 blur-2xl transition-opacity duration-200 group-hover:opacity-80" />
+      {hasTopRightAdornment && (
+        <div className="absolute right-4 top-4 z-10 flex max-w-[calc(100%-2rem)] items-start justify-end gap-2 sm:max-w-[48%]">
+          {cornerBadge}
+          {onUntrack && (
+            <EventUntrackButton
+              eventId={event.id}
+              variant="text"
+              onSuccess={() => onUntrack(event.id)}
+            />
+          )}
+        </div>
+      )}
       <EventListLink
         eventId={event.id}
         slug={event.slug}
         listPath={listPath}
         className="relative block"
       >
-        <div className="mb-3 flex flex-wrap items-center gap-2 pr-16">
+        <div
+          className={`mb-3 flex flex-wrap items-center gap-2 ${hasTopRightAdornment ? 'pr-20 sm:pr-56' : ''}`}
+        >
           <HeatBar score={event.heatScore} />
           {event.categoryHint && (
             <Badge variant="brand">{categoryLabel(event.categoryHint)}</Badge>
@@ -40,7 +59,9 @@ export function EventCard({
             {STATUS_LABELS[event.status] ?? event.status}
           </span>
         </div>
-        <h2 className="mb-2 text-lg font-semibold leading-snug text-slate-900 transition-colors group-hover:text-brand-700">
+        <h2
+          className={`mb-2 text-lg font-semibold leading-snug text-slate-900 transition-colors group-hover:text-brand-700 ${cornerBadge ? 'sm:pr-44' : ''}`}
+        >
           {event.title}
         </h2>
         {event.summary && (
@@ -66,15 +87,6 @@ export function EventCard({
           </span>
         </div>
       </EventListLink>
-      {onUntrack && (
-        <div className="absolute right-4 top-4">
-          <EventUntrackButton
-            eventId={event.id}
-            variant="text"
-            onSuccess={() => onUntrack(event.id)}
-          />
-        </div>
-      )}
     </div>
   );
 }

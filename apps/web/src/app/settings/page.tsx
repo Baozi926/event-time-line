@@ -40,6 +40,9 @@ export default async function SettingsSourcesPage() {
         <DataSourcesSettingsManager
           initial={dataSources.settings}
           valyuApiKeyConfigured={dataSources.valyuApiKeyConfigured}
+          deepSeekApiKeyConfigured={dataSources.deepSeekApiKeyConfigured}
+          embeddingApiKeyConfigured={dataSources.embeddingApiKeyConfigured}
+          embeddingServiceReachable={dataSources.embeddingServiceReachable}
         />
       )}
 

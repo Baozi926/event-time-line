@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { subscribeHotTrend, trackHotTrend } from '@/lib/api';
+import { subscribeHotTrend } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function HotTrendTrackButton({
@@ -20,10 +20,9 @@ export function HotTrendTrackButton({
   rank: number;
 }) {
   const router = useRouter();
-  const { user, isAdmin } = useAuth();
-  const [loading, setLoading] = useState<'subscribe' | 'track' | null>(null);
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
-  const [tracked, setTracked] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   if (!user) {
@@ -39,7 +38,7 @@ export function HotTrendTrackButton({
 
   async function handleSubscribe() {
     setFeedback(null);
-    setLoading('subscribe');
+    setLoading(true);
     try {
       await subscribeHotTrend({ platformId, platformName, title, url, rank });
       setSubscribed(true);
@@ -47,49 +46,21 @@ export function HotTrendTrackButton({
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : '关注失败');
     } finally {
-      setLoading(null);
-    }
-  }
-
-  async function handleTrack() {
-    setFeedback(null);
-    setLoading('track');
-    try {
-      await trackHotTrend({ platformId, platformName, title, url, rank });
-      setTracked(true);
-      router.refresh();
-    } catch (e) {
-      setFeedback(e instanceof Error ? e.message : '纳入系统追踪失败');
-    } finally {
-      setLoading(null);
+      setLoading(false);
     }
   }
 
   return (
     <div className="shrink-0 space-y-1">
-      <div className="flex flex-wrap justify-end gap-1.5">
-        <button
-          type="button"
-          onClick={handleSubscribe}
-          disabled={loading !== null || subscribed}
-          className="rounded-full border border-brand-100 bg-white px-2.5 py-1 text-xs font-medium text-brand-700 transition-colors hover:border-brand-200 hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
-          aria-label={`关注“${title}”`}
-        >
-          {loading === 'subscribe' ? '处理中…' : subscribed ? '已关注' : '关注'}
-        </button>
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={handleTrack}
-            disabled={loading !== null || tracked}
-            className="rounded-full border border-orange-100 bg-white px-2.5 py-1 text-xs font-medium text-orange-700 transition-colors hover:border-orange-200 hover:bg-orange-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
-            aria-label={`将“${title}”纳入系统追踪`}
-          >
-            {loading === 'track' ? '处理中…' : tracked ? '已追踪' : '系统追踪'}
-          </button>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={handleSubscribe}
+        disabled={loading || subscribed}
+        className="rounded-full border border-brand-100 bg-white px-2.5 py-1 text-xs font-medium text-brand-700 transition-colors hover:border-brand-200 hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+        aria-label={`关注“${title}”`}
+      >
+        {loading ? '处理中…' : subscribed ? '已关注' : '关注'}
+      </button>
       {feedback && (
         <p
           role="alert"

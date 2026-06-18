@@ -3,8 +3,10 @@ import {
   TREND_RADAR_RECOMMENDED_RSS,
   type DefaultRssFeed,
 } from './trend-radar-rss.js';
+import { AI_GDELT_QUERY } from './topics.js';
 
 export const GDELT_CATEGORIES: Record<string, string> = {
+  ai: AI_GDELT_QUERY,
   politics:
     '("election" OR "government" OR "parliament" OR "president" OR "coup" OR "sanctions" OR "diplomatic summit")',
   disaster:
@@ -12,7 +14,7 @@ export const GDELT_CATEGORIES: Record<string, string> = {
   conflict:
     '("war" OR "military" OR "attack" OR "ceasefire" OR "airstrike" OR "missile strike" OR "bombing" OR "troops mobilization" OR "piracy")',
   tech:
-    '("artificial intelligence" OR "cyber attack" OR "data breach" OR "ransomware" OR "malware")',
+    '("cyber attack" OR "data breach" OR "ransomware" OR "malware" OR "hacking")',
   economy:
     '("market crash" OR "recession" OR "trade war" OR "inflation" OR "commodity crisis" OR "food shortage")',
   society:

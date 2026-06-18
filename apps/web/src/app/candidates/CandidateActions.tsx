@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import {
   archiveCandidate,
   subscribeFromCandidate,
-  trackCandidate,
   unsubscribeFromEvent,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,9 +41,7 @@ export function CandidateActions({
     setIsSubscribed(subscribed);
   }, [subscribed]);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
-  const [loading, setLoading] = useState<'subscribe' | 'track' | 'archive' | null>(
-    null,
-  );
+  const [loading, setLoading] = useState<'subscribe' | 'archive' | null>(null);
 
   async function handleToggleSubscribe() {
     if (isSubscribed && subscribedDisplay === 'status') return;
@@ -70,23 +67,6 @@ export function CandidateActions({
       }
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : '关注失败');
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  async function handleTrack() {
-    setFeedback(null);
-    setLoading('track');
-    try {
-      await trackCandidate(candidateId);
-      if (redirectTo) {
-        router.push(redirectTo);
-      } else {
-        router.refresh();
-      }
-    } catch (e) {
-      setFeedback(e instanceof Error ? e.message : '操作失败');
     } finally {
       setLoading(null);
     }
@@ -156,24 +136,14 @@ export function CandidateActions({
         )}
 
         {isAdmin && showAdminActions && (
-          <>
-            <button
-              type="button"
-              onClick={handleTrack}
-              disabled={loading !== null}
-              className={secondaryClass}
-            >
-              {loading === 'track' ? '处理中…' : compact ? '系统追踪' : '纳入系统追踪'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setArchiveConfirmOpen(true)}
-              disabled={loading !== null}
-              className={archiveClass}
-            >
-              {loading === 'archive' ? '处理中…' : '归档'}
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => setArchiveConfirmOpen(true)}
+            disabled={loading !== null}
+            className={archiveClass}
+          >
+            {loading === 'archive' ? '处理中…' : '归档'}
+          </button>
         )}
       </div>
 

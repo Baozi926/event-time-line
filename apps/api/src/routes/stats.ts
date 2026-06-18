@@ -3,6 +3,7 @@ import { query } from '@event-time-line/database';
 import type {
   DashboardCategoryActivity,
   DashboardDailyCount,
+  DashboardLlmDailyUsage,
   DashboardStats,
   DashboardTopCandidate,
   DashboardTopEvent,
@@ -30,6 +31,9 @@ export async function statsRoutes(app: FastifyInstance) {
       topCandidates,
       articlesDaily,
       categoryActivity,
+      llmToday,
+      llmDaily,
+      llmLast7d,
     ] = await Promise.all([
       query<{ total: string; last_24h: string; last_1h: string }>(
         `SELECT
@@ -105,6 +109,28 @@ export async function statsRoutes(app: FastifyInstance) {
            AND category IS NOT NULL
          GROUP BY category
          ORDER BY SUM(articles_new) DESC`,
+      ),
+      query<{ call_count: string; error_count: string }>(
+        `SELECT
+           COALESCE(SUM(call_count), 0)::text AS call_count,
+           COALESCE(SUM(error_count), 0)::text AS error_count
+         FROM llm_usage_daily
+         WHERE usage_date = CURRENT_DATE`,
+      ),
+      query<{ date: Date; call_count: string; error_count: string }>(
+        `SELECT
+           usage_date AS date,
+           SUM(call_count)::text AS call_count,
+           SUM(error_count)::text AS error_count
+         FROM llm_usage_daily
+         WHERE usage_date >= CURRENT_DATE - INTERVAL '6 days'
+         GROUP BY usage_date
+         ORDER BY usage_date ASC`,
+      ),
+      query<{ total: string }>(
+        `SELECT COALESCE(SUM(call_count), 0)::text AS total
+         FROM llm_usage_daily
+         WHERE usage_date >= CURRENT_DATE - INTERVAL '6 days'`,
       ),
     ]);
 
@@ -183,6 +209,18 @@ export async function statsRoutes(app: FastifyInstance) {
           count: parseInt(r.count, 10) || 0,
         }),
       ),
+      llmUsage: {
+        todayCalls: int(llmToday.rows[0] ?? {}, 'call_count'),
+        todayErrors: int(llmToday.rows[0] ?? {}, 'error_count'),
+        last7dCalls: int(llmLast7d.rows[0] ?? {}, 'total'),
+        daily: llmDaily.rows.map(
+          (r): DashboardLlmDailyUsage => ({
+            date: (r.date as Date).toISOString().slice(0, 10),
+            callCount: parseInt(r.call_count, 10) || 0,
+            errorCount: parseInt(r.error_count, 10) || 0,
+          }),
+        ),
+      },
     };
 
     return stats;

@@ -5,14 +5,21 @@ import {
   HOT_TREND_REQUEST_INTERVAL_MS,
 } from './hot-trend-platforms.js';
 import { VALYU_THREAT_QUERIES } from './threat-queries.js';
+import {
+  EMBEDDING_DIMENSIONS,
+  isHttpUrl,
+  type EmbeddingSettings,
+} from './embedding.js';
 
 export const HOT_TREND_FETCH_INTERVAL_OPTIONS = [30, 60, 120, 240] as const;
 export type HotTrendFetchIntervalMinutes =
   (typeof HOT_TREND_FETCH_INTERVAL_OPTIONS)[number];
 
 export const DATA_SOURCES_SETTINGS_KEY = 'data_sources';
+export const DEEPSEEK_API_KEY_SETTINGS_KEY = 'deepseek_api_key';
 
 export const GDELT_CATEGORY_LABELS: Record<string, string> = {
+  ai: '人工智能',
   politics: '政治',
   disaster: '灾害',
   conflict: '冲突',
@@ -84,17 +91,27 @@ export interface UsgsSourceSettings {
   minMagnitude: number;
 }
 
+export interface AiEnhancementSettings {
+  /** Enables paid LLM calls for event topic classification. */
+  enabled: boolean;
+}
+
 export interface DataSourcesSettings {
   gdelt: GdeltSourceSettings;
   hotTrend: HotTrendSourceSettings;
   valyu: ValyuSourceSettings;
   usgs: UsgsSourceSettings;
+  aiEnhancement: AiEnhancementSettings;
+  embedding: EmbeddingSettings;
 }
 
 export interface DataSourcesSettingsResponse {
   settings: DataSourcesSettings;
   updatedAt: string;
   valyuApiKeyConfigured: boolean;
+  deepSeekApiKeyConfigured: boolean;
+  embeddingApiKeyConfigured: boolean;
+  embeddingServiceReachable: boolean;
 }
 
 const DEFAULT_GDELT_API_URL =
@@ -155,6 +172,23 @@ export const DEFAULT_DATA_SOURCES_SETTINGS: DataSourcesSettings = {
     enabled: true,
     feedUrl: DEFAULT_USGS_FEED_URL,
     minMagnitude: 4.5,
+  },
+  aiEnhancement: {
+    enabled: false,
+  },
+  embedding: {
+    enabled: true,
+    provider: 'local',
+    dimensions: EMBEDDING_DIMENSIONS,
+    minSimilarity: 0.55,
+    local: {
+      baseUrl: 'http://localhost:8082',
+      model: 'bge-m3',
+    },
+    api: {
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'text-embedding-3-small',
+    },
   },
 };
 
@@ -252,6 +286,51 @@ function parseValyuQueries(input: unknown): ValyuQueryConfig[] | null {
   return queries.length > 0 ? queries : null;
 }
 
+function parseEmbeddingSettings(input: unknown): EmbeddingSettings | null {
+  if (!input || typeof input !== 'object') return null;
+  const raw = input as Record<string, unknown>;
+  const provider = raw.provider === 'api' ? 'api' : 'local';
+  const minSimilarity = Number(raw.minSimilarity);
+
+  const localRaw = raw.local;
+  const apiRaw = raw.api;
+  if (!localRaw || typeof localRaw !== 'object' || !apiRaw || typeof apiRaw !== 'object') {
+    return null;
+  }
+
+  const localObj = localRaw as Record<string, unknown>;
+  const apiObj = apiRaw as Record<string, unknown>;
+  const localBaseUrl = typeof localObj.baseUrl === 'string' ? localObj.baseUrl.trim() : '';
+  const localModel = typeof localObj.model === 'string' ? localObj.model.trim() : '';
+  const apiBaseUrl = typeof apiObj.baseUrl === 'string' ? apiObj.baseUrl.trim() : '';
+  const apiModel = typeof apiObj.model === 'string' ? apiObj.model.trim() : '';
+
+  if (
+    !localBaseUrl || !isHttpUrl(localBaseUrl)
+    || !localModel
+    || !apiBaseUrl || !isHttpsUrl(apiBaseUrl)
+    || !apiModel
+    || !Number.isFinite(minSimilarity) || minSimilarity < 0.3 || minSimilarity > 0.95
+  ) {
+    return null;
+  }
+
+  return {
+    enabled: raw.enabled !== false,
+    provider,
+    dimensions: EMBEDDING_DIMENSIONS,
+    minSimilarity,
+    local: {
+      baseUrl: localBaseUrl.replace(/\/$/, ''),
+      model: localModel,
+    },
+    api: {
+      baseUrl: apiBaseUrl.replace(/\/$/, ''),
+      model: apiModel,
+    },
+  };
+}
+
 export function parseDataSourcesSettings(
   input: unknown,
 ): DataSourcesSettings | null {
@@ -262,6 +341,7 @@ export function parseDataSourcesSettings(
   const hotTrendRaw = raw.hotTrend;
   const valyuRaw = raw.valyu;
   const usgsRaw = raw.usgs;
+  const aiEnhancementRaw = raw.aiEnhancement;
 
   if (
     !gdeltRaw || typeof gdeltRaw !== 'object'
@@ -276,6 +356,12 @@ export function parseDataSourcesSettings(
   const hotTrendObj = hotTrendRaw as Record<string, unknown>;
   const valyuObj = valyuRaw as Record<string, unknown>;
   const usgsObj = usgsRaw as Record<string, unknown>;
+  const aiEnhancementObj =
+    aiEnhancementRaw && typeof aiEnhancementRaw === 'object'
+      ? (aiEnhancementRaw as Record<string, unknown>)
+      : DEFAULT_DATA_SOURCES_SETTINGS.aiEnhancement;
+  const embedding =
+    parseEmbeddingSettings(raw.embedding) ?? DEFAULT_DATA_SOURCES_SETTINGS.embedding;
 
   const apiUrl = typeof gdeltObj.apiUrl === 'string' ? gdeltObj.apiUrl.trim() : '';
   const categoryDelayMs = Number(gdeltObj.categoryDelayMs);
@@ -343,6 +429,10 @@ export function parseDataSourcesSettings(
       feedUrl,
       minMagnitude,
     },
+    aiEnhancement: {
+      enabled: aiEnhancementObj.enabled === true,
+    },
+    embedding,
   };
 }
 
@@ -389,6 +479,8 @@ export function mergeDataSourcesSettings(
       queries: Array.from(valyuMap.values()),
     },
     usgs: parsed.usgs,
+    aiEnhancement: parsed.aiEnhancement ?? defaults.aiEnhancement,
+    embedding: parsed.embedding ?? defaults.embedding,
   };
 }
 

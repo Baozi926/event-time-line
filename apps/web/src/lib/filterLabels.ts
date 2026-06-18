@@ -8,6 +8,7 @@ const HOT_TREND_LABELS = Object.fromEntries(
 );
 
 export const CATEGORY_LABELS: Record<string, string> = {
+  ai: '人工智能',
   ...GDELT_CATEGORY_LABELS,
   ...HOT_TREND_LABELS,
   rss: 'RSS',

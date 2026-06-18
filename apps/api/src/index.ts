@@ -16,6 +16,8 @@ import { hotTrendRoutes } from './routes/hot-trends.js';
 import { dataSourcesSettingsRoutes } from './routes/data-sources-settings.js';
 import { authRoutes } from './routes/auth.js';
 import { subscriptionRoutes } from './routes/subscriptions.js';
+import { topicSubscriptionRoutes } from './routes/topic-subscriptions.js';
+import { keywordSubscriptionRoutes } from './routes/keyword-subscriptions.js';
 import { attachUser } from './auth/middleware.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
@@ -56,6 +58,8 @@ app.get('/health', async () => ({ status: 'ok' }));
 
 await app.register(authRoutes);
 await app.register(subscriptionRoutes);
+await app.register(topicSubscriptionRoutes);
+await app.register(keywordSubscriptionRoutes);
 await app.register(eventRoutes);
 await app.register(candidateRoutes);
 await app.register(collectionRoutes);

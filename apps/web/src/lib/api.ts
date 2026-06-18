@@ -1,9 +1,12 @@
 import type {
   Event,
+  EventEnriched,
   EventDailySnapshot,
   EventListResponse,
   CandidateListResponse,
   CandidateDetailResponse,
+  CandidateEmbeddingInfo,
+  CandidateSimilarItem,
   Article,
   CollectionRun,
   DashboardStats,
@@ -18,6 +21,11 @@ import type {
   SubscriptionListResponse,
   DataSourcesSettings,
   DataSourcesSettingsResponse,
+  TopicSubscriptionListResponse,
+  TopicEventListResponse,
+  KeywordSubscriptionListResponse,
+  KeywordEventListResponse,
+  KeywordEventMatchResponse,
 } from '@event-time-line/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -164,6 +172,97 @@ export async function unsubscribeFromEvent(eventId: string): Promise<void> {
   await fetchClient(`/api/v1/me/subscriptions/${eventId}`, { method: 'DELETE' });
 }
 
+export function getMyTopicSubscriptions(): Promise<TopicSubscriptionListResponse> {
+  return fetchClient('/api/v1/me/topic-subscriptions');
+}
+
+export function getTopicSubscriptionEvents(params?: {
+  topic?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<TopicEventListResponse> {
+  const q = new URLSearchParams();
+  if (params?.topic) q.set('topic', params.topic);
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  const qs = q.toString();
+  return fetchClient(`/api/v1/me/topic-subscriptions/events${qs ? `?${qs}` : ''}`);
+}
+
+export function fetchTopicSubscriptionEventsClient(params?: {
+  topic?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<TopicEventListResponse> {
+  const q = new URLSearchParams();
+  if (params?.topic) q.set('topic', params.topic);
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  const qs = q.toString();
+  return fetchClient(`/api/v1/me/topic-subscriptions/events${qs ? `?${qs}` : ''}`);
+}
+
+export async function subscribeToTopic(topicSlug: string): Promise<void> {
+  await fetchClient(`/api/v1/me/topic-subscriptions/${topicSlug}`, { method: 'POST' });
+}
+
+export async function unsubscribeFromTopic(topicSlug: string): Promise<void> {
+  await fetchClient(`/api/v1/me/topic-subscriptions/${topicSlug}`, { method: 'DELETE' });
+}
+
+export function getMyKeywordSubscriptions(): Promise<KeywordSubscriptionListResponse> {
+  return fetchClient('/api/v1/me/keyword-subscriptions');
+}
+
+export function getKeywordSubscriptionEvents(params?: {
+  keyword?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<KeywordEventListResponse> {
+  const q = new URLSearchParams();
+  if (params?.keyword) q.set('keyword', params.keyword);
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  const qs = q.toString();
+  return fetchClient(`/api/v1/me/keyword-subscriptions/events${qs ? `?${qs}` : ''}`);
+}
+
+export function fetchKeywordSubscriptionEventsClient(params?: {
+  keyword?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<KeywordEventListResponse> {
+  const q = new URLSearchParams();
+  if (params?.keyword) q.set('keyword', params.keyword);
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  const qs = q.toString();
+  return fetchClient(`/api/v1/me/keyword-subscriptions/events${qs ? `?${qs}` : ''}`);
+}
+
+export async function subscribeToKeyword(keyword: string): Promise<void> {
+  await fetchClient('/api/v1/me/keyword-subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({ keyword }),
+  });
+}
+
+export async function unsubscribeFromKeyword(id: string): Promise<void> {
+  await fetchClient(`/api/v1/me/keyword-subscriptions/${id}`, { method: 'DELETE' });
+}
+
+export function getKeywordEventMatches(slug: string): Promise<KeywordEventMatchResponse> {
+  return fetchClient(`/api/v1/me/keyword-subscriptions/matches/${slug}`);
+}
+
 export function getEvents(params?: {
   sort?: string;
   category?: string;
@@ -188,7 +287,7 @@ export function fetchEventsClient(params?: {
   return fetchClient(`/api/v1/events${qs ? `?${qs}` : ''}`);
 }
 
-export function getEvent(slug: string): Promise<Event> {
+export function getEvent(slug: string): Promise<EventEnriched> {
   return fetchClient(`/api/v1/events/${slug}`);
 }
 
@@ -240,12 +339,28 @@ export async function getCandidate(id: string): Promise<CandidateDetailResponse>
   }
 }
 
-export async function trackCandidate(id: string): Promise<void> {
-  await fetchClient(`/api/v1/candidates/${id}/track`, { method: 'POST' });
-}
-
 export async function archiveCandidate(id: string): Promise<void> {
   await fetchClient(`/api/v1/candidates/${id}/archive`, { method: 'POST' });
+}
+
+export async function generateCandidateEmbedding(
+  id: string,
+): Promise<{
+  success: true;
+  embedding: CandidateEmbeddingInfo;
+  similarEvents: CandidateSimilarItem[];
+}> {
+  return fetchClient(`/api/v1/candidates/${id}/generate-embedding`, { method: 'POST' });
+}
+
+export async function generateEventEmbedding(
+  slug: string,
+): Promise<{
+  success: true;
+  embedding: CandidateEmbeddingInfo;
+  similarEvents: CandidateSimilarItem[];
+}> {
+  return fetchClient(`/api/v1/events/${slug}/generate-embedding`, { method: 'POST' });
 }
 
 export async function untrackEvent(slug: string): Promise<void> {
@@ -442,24 +557,6 @@ export function getHotTrends(params?: { live?: boolean }): Promise<HotTrendsResp
   });
 }
 
-export async function trackHotTrend(input: {
-  platformId: string;
-  platformName?: string;
-  title: string;
-  url: string;
-  rank?: number;
-}): Promise<{ success: boolean; eventId: string }> {
-  const data = await fetchClient<{ success?: boolean; eventId?: string }>(
-    '/api/v1/hot-trends/track',
-    {
-      method: 'POST',
-      body: JSON.stringify(input),
-    },
-  );
-  if (!data.eventId) throw new Error('纳入系统追踪失败');
-  return { success: Boolean(data.success), eventId: data.eventId };
-}
-
 export async function subscribeHotTrend(input: {
   platformId: string;
   platformName?: string;
@@ -490,14 +587,26 @@ export function getDataSourcesSettings(): Promise<DataSourcesSettingsResponse> {
 export async function updateDataSourcesSettings(
   settings: DataSourcesSettings,
 ): Promise<DataSourcesSettingsResponse & { message: string }> {
-  const res = await fetch(`${API_URL}/api/v1/settings/data-sources`, {
+  return fetchClient('/api/v1/settings/data-sources', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error ?? '保存失败');
-  }
-  return data;
+}
+
+export async function updateEmbeddingApiKey(
+  apiKey: string,
+): Promise<{ embeddingApiKeyConfigured: boolean; message: string }> {
+  return fetchClient('/api/v1/settings/embedding-api-key', {
+    method: 'PUT',
+    body: JSON.stringify({ apiKey }),
+  });
+}
+
+export async function updateDeepSeekApiKey(
+  apiKey: string,
+): Promise<{ deepSeekApiKeyConfigured: boolean; message: string }> {
+  return fetchClient('/api/v1/settings/deepseek-api-key', {
+    method: 'PUT',
+    body: JSON.stringify({ apiKey }),
+  });
 }

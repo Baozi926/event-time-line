@@ -1,4 +1,5 @@
 import type { RawArticle } from './types/index.js';
+import { matchTopicsFromText } from './topics.js';
 
 export const BLOCKED_ARTICLE_DOMAINS = [
   'wikipedia.org',
@@ -56,9 +57,15 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     'economy', 'trade', 'tariff', 'inflation', 'recession', 'market',
     'commodity', 'food shortage', 'famine', 'food price',
   ],
+  ai: [
+    'artificial intelligence', 'large language model', 'generative ai',
+    'machine learning', 'deep learning', 'neural network', 'chatgpt', 'openai',
+    'anthropic', 'claude', 'gemini', 'llm', 'gpt-4', 'copilot',
+    '人工智能', '大模型', '生成式', '深度学习', '机器学习',
+  ],
   tech: [
     'cyber', 'hack', 'breach', 'malware', 'ransomware', 'data leak',
-    'artificial intelligence', 'data breach',
+    'data breach',
   ],
   health: [
     'pandemic', 'epidemic', 'outbreak', 'virus', 'disease', 'covid',
@@ -250,10 +257,14 @@ export function prepareArticle(raw: RawArticle): RawArticle | null {
   const snippet = cleanArticleText(snippetSource).slice(0, 500);
   const fullText = `${title} ${snippet}`;
 
-  const categoryHint =
+  let categoryHint =
     raw.categoryHint && raw.categoryHint !== 'rss'
       ? raw.categoryHint
       : classifyCategoryFromText(fullText);
+
+  if (matchTopicsFromText(fullText).includes('ai') && categoryHint !== 'ai') {
+    categoryHint = 'ai';
+  }
 
   const country = raw.country ?? inferCountryFromText(fullText);
 
